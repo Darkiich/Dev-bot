@@ -319,3 +319,11 @@ class DatabaseManagerSS14:
             return results
         finally:
             await conn.close()
+
+    async def get_list_permission(self, db_name: str = 'mrp'):
+        conn = await self.get_connection(db_name)
+        try:
+            result = await conn.fetch("SELECT name FROM admin_rank ORDER BY admin_rank_id ASC")
+            return result
+        finally:
+            await conn.close()
