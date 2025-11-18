@@ -125,7 +125,7 @@ embed_admin_help = {
     "description": "Префикс: `&`",
     "fields": [
         {"name": "Управление правами", "value": '&admin <nickname> — Проверка прав админа.\n&list_permission <mrp/dev> (по умолчанию mrp) - выводит список прав сервера\n&add_permission <username> \"<title>\" \"<permission>\" <server> — Добавить права на сервере DEV/MRP.\n&del_permission <username> <server> — Удалить права на сервере DEV/MRP.\n&tweak_permission <username> \"<title>\" \"<permission>\" <server> — Изменить права на сервере DEV/MRP.', "inline": False},
-        {"name": "Информация о игроке", "value": '&check_nick <nickname> — Проверка на мультиаккаунт.\n&get_ckey <Discord id> — Получить ckey по ID дискорда.\n&notelist <nickname> — Заметки игрока.\n&banlist <nickname> — Банлист игрока.', "inline": False},
+        {"name": "Информация о игроке", "value": '&logs <username> <round> <server>.\n&check_nick <nickname> — Проверка на мультиаккаунт.\n&get_ckey <Discord id> — Получить ckey по ID дискорда.\n&notelist <nickname> — Заметки игрока.\n&banlist <nickname> — Банлист игрока.', "inline": False},
         {"name": "Баны и модерация", "value": '&ban <nickname> \"<reason>\" <time> в минутах — Выдает бан игроку.\n&kick <nickname> \"<reason>\" — Кик.\n&pardon <ban_id> — Разбанивает игрока.', "inline": False},
         {"name": "Сервер", "value": '&status <mrp/dev> (по умолчанию mrp) - Информация о сервере\n&admin_info — Подробная информация о сервере.\n&bunker <on/off> — Включает/выключает бункер.\n&restart <server> — Рестарт сервера.', "inline": False},
     ]
