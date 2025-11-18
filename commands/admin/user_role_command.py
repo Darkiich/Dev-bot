@@ -1,6 +1,7 @@
 import disnake
 from bot_init import bot
-from dataConfig import VACATION_ROLE_ID
+from dataConfig import VACATION_ROLE_ID, GENERAL_ACCESS
+from disnake.ext.commands import has_any_role
 
 @bot.command(name='user_role')
 async def user_role_command(ctx, *, input: str):
@@ -22,6 +23,7 @@ async def user_role_command(ctx, *, input: str):
     embed = disnake.Embed(title=f"Пользователи с ролью {role.name}", description=text)
     await ctx.send(embed=embed)
 
+@bot.has_any_role(*GENERAL_ACCESS)
 @bot.command(name='user_role_mention')
 async def user_role_mention_command(ctx, *, input: str):
     role = None
