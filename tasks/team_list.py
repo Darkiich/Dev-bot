@@ -291,7 +291,7 @@ async def list_team_error(ctx, error):
         await ctx.send(f"❗ Произошла ошибка: {error}")
 
 
-@tasks.loop(hours=5)
+@tasks.loop(hours=12)
 async def list_team_task(): # pylint: disable=R0912
     """
     Задача, выполняющаяся каждые 12 часов. Очищает канал от последних 15 сообщений.

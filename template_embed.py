@@ -124,9 +124,25 @@ embed_admin_help = {
     "color": 0xFF0000,
     "description": "Префикс: `&`",
     "fields": [
-        {"name": "Управление правами", "value": '&admin <nickname> — Проверка прав админа.\n&add_permission <username> \"<title>\" \"<permission>\" <server> — Добавить права на сервере DEV/MRP.\n&del_permission <username> <server> — Удалить права на сервере DEV/MRP.\n&tweak_permission <username> \"<title>\" \"<permission>\" <server> — Изменить права на сервере DEV/MRP.', "inline": False},
-        {"name": "Информация о игроке", "value": '&check_nick <nickname> — Проверка на мультиаккаунт.\n&get_ckey <Discord id> — Получить ckey по ID дискорда.\n&notelist <nickname> — Заметки игрока.\n&banlist <nickname> — Банлист игрока.', "inline": False},
+        {"name": "Управление правами", "value": '&admin <nickname> — Проверка прав админа.\n&list_permission <mrp/dev> (по умолчанию mrp) - выводит список прав сервера\n&add_permission <username> \"<title>\" \"<permission>\" <server> — Добавить права на сервере DEV/MRP.\n&del_permission <username> <server> — Удалить права на сервере DEV/MRP.\n&tweak_permission <username> \"<title>\" \"<permission>\" <server> — Изменить права на сервере DEV/MRP.', "inline": False},
+        {"name": "Информация о игроке", "value": '&logs <username> <round> <server>.\n&check_nick <nickname> — Проверка на мультиаккаунт.\n&get_ckey <Discord id> — Получить ckey по ID дискорда.\n&notelist <nickname> — Заметки игрока.\n&banlist <nickname> — Банлист игрока.', "inline": False},
         {"name": "Баны и модерация", "value": '&ban <nickname> \"<reason>\" <time> в минутах — Выдает бан игроку.\n&kick <nickname> \"<reason>\" — Кик.\n&pardon <ban_id> — Разбанивает игрока.', "inline": False},
         {"name": "Сервер", "value": '&status <mrp/dev> (по умолчанию mrp) - Информация о сервере\n&admin_info — Подробная информация о сервере.\n&bunker <on/off> — Включает/выключает бункер.\n&restart <server> — Рестарт сервера.', "inline": False},
+    ]
+}
+
+embed_list_permission = {
+    "title": "Список прав",
+    "color": 0xFF0000
+}
+
+embed_help = {
+    "title": "Список команд бота",
+    "color": 0x0099ff,
+    "fields": [
+        {"name": "Основные команды", "value": '🤖 &help - Вывод всех команд бота.\n😈 &admin_help - Вывод админ-команд для взаимодействия с игровым сервером.\n🚀 &git_help - Вывод git-команд для взаимодействия с репозиторием.\n🔍 &check - проверяет работу бота\n🎭 &user_role <роль> - выводит список пользователнй с этой ролью\n🎮 &status - выводит информацию о игровом сервере в данный момент', "inline": False},
+        {"name": "\nЧто ещё умеет бот:", "value": '⚒️ Отправлять чейнджлоги при добавлении нового контента в канале #https://discord.com/channels/901772674865455115/1089490875182239754\n📢 Обновлять статус сервера в канале #https://discord.com/channels/901772674865455115/1320771026019422329\n📖 Обновлять список команды проекта в канале #https://discord.com/channels/901772674865455115/1297158288063987752', "inline": False},
+        {"name": "\nРазработчики:", "value": '👑 Автор бота: Darkiich(mskaktus)\n🔎 Мейнтейнер: Darkiich(mskaktus)\n🔌 Хостинг: Github Actions', "inline": False},
+        {"name": "\nРепозиторий бота:", "value": '🔗 Гитхаб: https://github.com/Darkiich/Dev-bot', "inline": False}
     ]
 }

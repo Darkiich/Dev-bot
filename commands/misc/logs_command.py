@@ -1,8 +1,8 @@
 from bot_init import bot, ss14_db
-from dataConfig import ROLE_ACCESS_HEADS
+from dataConfig import ROLE_ACCESS_OBSERVER_ADMIN
 from disnake.ext.commands import has_any_role
 
-@has_any_role(*ROLE_ACCESS_HEADS)
+@has_any_role(*ROLE_ACCESS_OBSERVER_ADMIN)
 @bot.command(name="logs")
 async def logs_command(ctx, username: str, round_id: int, db_name: str = 'mrp'):
         guid_admin = await ss14_db.get_player_guid(username)
