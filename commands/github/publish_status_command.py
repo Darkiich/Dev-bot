@@ -9,7 +9,7 @@ from dataConfig import ROLE_ACCESS_MAINTAINER, USER_KEY_GITHUB
 @has_any_role(*ROLE_ACCESS_MAINTAINER)
 @bot.command(name="publish_status")
 async def publish_status_command(ctx):
-    url = "https://api.github.com/repos/AdventureTimeSS14/space_station_ADT/actions/workflows/publish-adt.yml/runs"
+    url = "https://api.github.com/repos/AdventureTimeSS14/space_station_ADT/actions/workflows/publish-public.yml.yml/runs"
 
     headers = {
         "Accept": "application/vnd.github.v3+json",
