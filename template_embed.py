@@ -26,7 +26,7 @@ embed_log = {
 }
 
 embed_publish_status = {
-    "title": "Статус workflow publish-adt.yml",
+    "title": "Статус workflow publish-public.yml",
     "fields": [
         {"name": "Статус", "value": "translated_status", "inline": False},
         {"name": "Ветка", "value": "branch", "inline": False},

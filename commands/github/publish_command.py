@@ -12,7 +12,7 @@ async def publish_command(ctx, branch: str = "master"):
         await ctx.send("Не указана ветка для паблиша")
         return
 
-    url = f"https://api.github.com/repos/AdventureTimeSS14/space_station_ADT/actions/workflows/publish-adt.yml/dispatches"
+    url = f"https://api.github.com/repos/AdventureTimeSS14/space_station_ADT/actions/workflows/publish-public.yml/dispatches"
     
     headers = {
         "Accept": "application/vnd.github.v3+json",
