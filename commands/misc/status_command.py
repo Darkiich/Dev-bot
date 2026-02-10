@@ -12,7 +12,7 @@ async def status_command(ctx, server: str = "mrp"):
         port = "1212"
     elif server.lower() == "dev":
         address = ADDRESS_DEV
-        port = "1211"
+        port = "11212"
     else:
         await ctx.send("Неверный сервер: dev или mrp")
         return
