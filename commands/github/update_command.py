@@ -10,17 +10,19 @@ async def update_command(ctx, server: str = "mrp"):
 
     if server.lower() == "mrp":
         address = ADDRESS_MRP
+        port = 5000
         data = DATA_MRP
         headers = HEADERS_MRP
     elif server.lower() == "dev":
         address = ADDRESS_DEV
+        port = 5001
         data = DATA_DEV
         headers = HEADERS_DEV
     else:
         await ctx.send("Неверный сервер: mrp или dev")
         return
 
-    url = f"http://{address}:5000/instances/{server.upper()}/update"
+    url = f"http://{address}:{port}/instances/{server.upper()}/update"
 
     await ctx.send(f"Запуск обновления {server.upper()}...")
 
