@@ -11,18 +11,20 @@ async def restart_command(ctx, server: str = "mrp"):
     if server.lower() == "mrp":
         address = ADDRESS_MRP
         instance = "MRP"
+        port = 5000
         data = DATA_MRP
         headers = HEADERS_MRP
     elif server.lower() == "dev":
         address = ADDRESS_DEV
         instance = "DEV"
+        port = 5001
         data = DATA_DEV
         headers = HEADERS_DEV
     else:
         await ctx.send("Неверный сервер: dev или mrp")
         return
 
-    url = f"http://{address}:5000/instances/{instance}/restart"
+    url = f"http://{address}:{port}/instances/{instance}/restart"
 
     await ctx.send(f"Запущен рестарт {server.upper()} сервера...")
 
