@@ -17,6 +17,7 @@ load_modules('commands.github')
 load_modules('commands.misc')
 load_modules('commands.team')
 load_modules('commands.discord')
+load_modules('commands.holiday')
 load_modules('tasks')
 load_modules('events')
 

@@ -1,0 +1,5 @@
+Author: .sharpteeth(discord)
+
+Path: src/valentine_card/image_valentine.png
+
+copyright: CC-BY-SA-NC
