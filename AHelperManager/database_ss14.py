@@ -1,5 +1,5 @@
 import asyncpg
-from dataConfig import DATABASE_MRP, DATABASE_DEV, DATABASE_HOST, DATABASE_PORT, DATABASE_USER, DATABASE_PASS
+from dataConfig import DATABASE_MRP, DATABASE_DEV, DATABASE_HOST, DATABASE_PORT, DATABASE_USER, DATABASE_PASS, DATABASE_MRP_SPONSOR
 from datetime import datetime
 
 class DatabaseManagerSS14:
@@ -17,6 +17,13 @@ class DatabaseManagerSS14:
             },
             'dev': {
                 'database': DATABASE_DEV,
+                'user': DATABASE_USER,
+                'password': DATABASE_PASS,
+                'host': DATABASE_HOST,
+                'port': DATABASE_PORT
+            },
+            'mrp_sponsor': {
+                'database': DATABASE_MRP_SPONSOR,
                 'user': DATABASE_USER,
                 'password': DATABASE_PASS,
                 'host': DATABASE_HOST,
@@ -325,5 +332,44 @@ class DatabaseManagerSS14:
         try:
             result = await conn.fetch("SELECT name FROM admin_rank ORDER BY admin_rank_id ASC")
             return result
+        finally:
+            await conn.close()
+    
+    async def get_sponsor(self, guid: str, db_name: str = 'mrp_sponsor'):
+        conn = await self.get_connection(db_name)
+        try:
+            result = await conn.fetchrow("SELECT user_id, player_name, donate_name, tier, ooccolor, have_priority_join, extra_slots, expire_date, allow_job FROM sponsors WHERE user_id = $1", guid)
+            return dict(result) if result else None
+        except Exception as e:
+            print(f"Ошибка БД: {e}")
+            return None
+        finally:
+            await conn.close()
+
+    async def delete_sponsor(self, guid: str, db_name: str = 'mrp_sponsor'):
+        conn = await self.get_connection(db_name)
+        try:
+            async with conn.transaction():
+                await conn.execute("DELETE FROM sponsors WHERE user_id = $1", guid)
+                return True
+        except Exception as e:
+            return False, f"Ошибка: {e}"
+        finally:
+            await conn.close()
+
+    async def add_sponsor(self, guid: str, player_name: str, donate_name: str, tier: str, ooccolor: str, have_priority_join: bool, markings: str, extra_slots: int, expire_date: datetime, allow_job: bool, db_name: str = 'mrp_sponsor'):
+        conn = await self.get_connection(db_name)
+        try:
+            async with conn.transaction():
+                if await conn.fetchval("SELECT 1 FROM sponsors WHERE user_id = $1", guid):
+                    return False
+
+                await conn.execute("""
+                    INSERT INTO sponsors (user_id, player_name, donate_name, tier, ooccolor, have_priority_join, allowed_markings, extra_slots, expire_date, allow_job)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10)
+                """, guid, player_name, donate_name, tier, ooccolor, have_priority_join, markings, extra_slots, expire_date, allow_job)
+                return True
+        except Exception as e:
+            return False, f"Ошибка: {e}"
         finally:
             await conn.close()

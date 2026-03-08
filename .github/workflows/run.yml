@@ -33,6 +33,7 @@ jobs:
           USER_KEY_GITHUB: ${{ secrets.USER_KEY_GITHUB }}
           POST_PASSWORD_MRP: ${{ secrets.POST_PASSWORD_MRP }}
           POST_PASSWORD_DEV: ${{ secrets.POST_PASSWORD_DEV }}
+          DATABASE_MRP_SPONSOR: ${{ secrets.DATABASE_MRP_SPONSOR }}
           POST_AUTHORIZATION_MRP: ${{ secrets.POST_AUTHORIZATION_MRP }}
           POST_AUTHORIZATION_DEV: ${{ secrets.POST_AUTHORIZATION_DEV }}
           POST_USER_AGENT: ${{ secrets.POST_USER_AGENT }}
