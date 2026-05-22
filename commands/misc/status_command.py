@@ -1,4 +1,5 @@
 import aiohttp
+from datetime import datetime, timezone, timedelta
 from bot_init import bot
 from template_embed import embed_status
 from dataConfig import ADDRESS_MRP, ADDRESS_DEV
@@ -26,8 +27,25 @@ async def status_command(ctx, server: str = "mrp"):
                     data = await resp.json()
 
                     embed = Embed(title=embed_status["title"], color=embed_status["color"])
+                    
+                    time_str = "Неизвестно"
+                    if data.get('round_start_time'):
+                        try:
+                            dt = datetime.fromisoformat(data['round_start_time'].replace('Z', '+00:00'))
+                            now = datetime.now(timezone.utc)
+                            delta = now - dt
+                            hours, remainder = divmod(int(delta.total_seconds()), 3600)
+                            minutes, _ = divmod(remainder, 60)
+                            time_str = f"{hours} часов и {minutes:02d} минуты"
+                        except:
+                            pass
+
                     for field in embed_status["fields"]:
-                        embed.add_field(name=field["name"], value=eval(field["value"]), inline=field["inline"])
+                        if field["name"] == "Время раунда":
+                            value = time_str
+                        else:
+                            value = eval(field["value"])
+                        embed.add_field(name=field["name"], value=value, inline=field["inline"])
                     await ctx.send(embed=embed)
                 else:
                     await ctx.send(f"Ошибка: код {resp.status}")

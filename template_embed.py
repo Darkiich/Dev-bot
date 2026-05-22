@@ -9,6 +9,7 @@ embed_status = {
         {"name": "Статус", "value": "'Раунд идёт' if data['run_level'] == 1 else 'Неизвестно'", "inline": False},
         {"name": "Раунд ID", "value": "data['round_id']", "inline": False},
         {"name": "Режим", "value": "data['preset']", "inline": False},
+        {"name": "Время раунда", "value": "None", "inline": False},
         {"name": "Бункер", "value": "data['panic_bunker']", "inline": False}
     ]
 }

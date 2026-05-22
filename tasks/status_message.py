@@ -1,4 +1,5 @@
 from bot_init import bot
+from datetime import datetime, timezone, timedelta
 from dataConfig import CHANNEL_STATUS_MESSAGE, ADDRESS_MRP
 from disnake import Embed
 from template_embed import embed_status
@@ -20,8 +21,25 @@ async def status_update():
                 if resp.status == 200:
                     data = await resp.json()
                     embed = Embed(title=embed_status["title"], color=embed_status["color"])
+
+                    time_str = "Неизвестно"
+                    if data.get('round_start_time'):
+                        try:
+                            dt = datetime.fromisoformat(data['round_start_time'].replace('Z', '+00:00'))
+                            now = datetime.now(timezone.utc)
+                            delta = now - dt
+                            hours, remainder = divmod(int(delta.total_seconds()), 3600)
+                            minutes, _ = divmod(remainder, 60)
+                            time_str = f"{hours} часов и {minutes:02d} минуты"
+                        except:
+                            pass
+
                     for field in embed_status["fields"]:
-                        embed.add_field(name=field["name"], value=eval(field["value"]), inline=field["inline"])
+                        if field["name"] == "Время раунда":
+                            value = time_str
+                        else:
+                            value = eval(field["value"])
+                        embed.add_field(name=field["name"], value=value, inline=field["inline"])
                 else:
                     embed = Embed(title="Ошибка", description=f"Код {resp.status}", color=0xff0000)
     except Exception as e:
