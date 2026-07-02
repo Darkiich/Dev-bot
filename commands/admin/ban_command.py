@@ -30,7 +30,7 @@ async def ban_command(ctx, nickname: str, reason: str, time: str):
         await ctx.send("Ошибка. Время не может быть пустым")
         return
 
-    url = f"http://{ADDRESS_MRP}:1212/admin/actions/server_ban"
+    url = f"http://{ADDRESS_MRP}:1212/admin/actions/ban"
 
     post_data = {"NickName": nickname, "Reason": reason, "Time": time}
 
