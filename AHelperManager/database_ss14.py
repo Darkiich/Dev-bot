@@ -349,6 +349,44 @@ class DatabaseManagerSS14:
         finally:
             await conn.close()
 
+    async def get_active_sponsor_guids(self, db_name: str = 'mrp_sponsor'):
+        """
+        Возвращает список GUID (user_id) спонсоров с активной подпиской.
+        Активной считается запись без даты окончания либо с датой окончания в будущем.
+        """
+        conn = await self.get_connection(db_name)
+        try:
+            rows = await conn.fetch("""
+                SELECT user_id FROM sponsors
+                WHERE expire_date IS NULL OR expire_date > now()
+            """)
+            return [r['user_id'] for r in rows]
+        except Exception as e:
+            print(f"Ошибка БД (get_active_sponsor_guids): {e}")
+            return []
+        finally:
+            await conn.close()
+
+    async def get_discord_ids_by_guids(self, guids: list, db_name: str = 'mrp'):
+        """
+        Возвращает dict {GUID(str): discord_id} для переданного списка GUID.
+        Связка берётся из таблицы discord_user основной БД.
+        """
+        if not guids:
+            return {}
+        conn = await self.get_connection(db_name)
+        try:
+            rows = await conn.fetch(
+                "SELECT user_id, discord_id FROM discord_user WHERE user_id = ANY($1::uuid[])",
+                guids
+            )
+            return {str(r['user_id']): r['discord_id'] for r in rows}
+        except Exception as e:
+            print(f"Ошибка БД (get_discord_ids_by_guids): {e}")
+            return {}
+        finally:
+            await conn.close()
+
     async def delete_sponsor(self, guid: str, db_name: str = 'mrp_sponsor'):
         """Удаляет спонсора"""
         conn = await self.get_connection(db_name)
