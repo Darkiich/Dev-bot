@@ -10,8 +10,10 @@ async def del_sponsor_command(ctx, username: str):
         await ctx.send(f"Пользователь {username} не найден в БД")
         return
     
-    success = await ss14_db.delete_sponsor(guid)
-    if success:
+    ok, info = await ss14_db.delete_sponsor(guid)
+    if ok:
         await ctx.send(f"Пользователь {username} удален из спонсоров")
+    elif info == "not_found":
+        await ctx.send(f"Пользователь {username} не найден в списке спонсоров")
     else:
-        await ctx.send(f"Не удалось удалить пользователя {username} из спонсоров")
+        await ctx.send(f"Не удалось удалить {username} из спонсоров:\n```{info}```")

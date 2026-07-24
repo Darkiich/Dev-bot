@@ -6,6 +6,7 @@ from tasks.sponsor_role_sync import sponsor_role_sync
 from tasks.db_size_monitor import db_size_monitor
 
 
+
 @bot.event
 async def on_ready():
     bot.add_view(RegisterButton())

@@ -1,4 +1,5 @@
 import asyncpg
+import json
 from dataConfig import DATABASE_MRP, DATABASE_DEV, DATABASE_HOST, DATABASE_PORT, DATABASE_USER, DATABASE_PASS, DATABASE_MRP_SPONSOR
 from datetime import datetime
 
@@ -160,21 +161,23 @@ class DatabaseManagerSS14:
         try:
             result = await conn.fetch("""
                 SELECT 
-                    sb.server_ban_id, 
-                    sb.ban_time, 
-                    sb.expiration_time, 
-                    sb.reason, 
-                    COALESCE(p.last_seen_user_name, 'Неизвестно') AS admin_nickname,
-                    ub.unban_time,
-                    COALESCE(p2.last_seen_user_name, 'Неизвестно') AS unban_admin_nickname
-                FROM server_ban sb
-                LEFT JOIN player p ON sb.banning_admin = p.user_id
-                LEFT JOIN server_unban ub ON sb.server_ban_id = ub.ban_id
-                LEFT JOIN player p2 ON ub.unbanning_admin = p2.user_id
-                WHERE sb.player_user_id = (
-                    SELECT user_id FROM player WHERE last_seen_user_name = $1
-                )
-                ORDER BY sb.server_ban_id ASC
+                b.ban_id,
+                b.ban_time,
+                b.expiration_time,
+                b.reason,
+                COALESCE(p.last_seen_user_name, 'Неизвестно') AS admin_nickname,
+                u.unban_time,
+                COALESCE(p2.last_seen_user_name, 'Неизвестно') AS unban_admin_nickname
+            FROM ban b
+            INNER JOIN ban_player bp ON b.ban_id = bp.ban_id
+            LEFT JOIN player p ON b.banning_admin = p.user_id
+            LEFT JOIN unban u ON b.ban_id = u.ban_id
+            LEFT JOIN player p2 ON u.unbanning_admin = p2.user_id
+            WHERE bp.user_id = (
+                SELECT user_id FROM player WHERE last_seen_user_name = $1
+            )
+            AND b.type = 0
+            ORDER BY b.ban_id ASC
             """, username)
             return result
         except Exception as e:
@@ -220,11 +223,11 @@ class DatabaseManagerSS14:
         conn = await self.get_connection(db_name)
         try:
             async with conn.transaction():
-                exists = await conn.fetchval("SELECT 1 FROM server_ban WHERE server_ban_id = $1", ban_id)
+                exists = await conn.fetchval("SELECT 1 FROM ban WHERE ban_id = $1 AND type = 0", ban_id)
                 if not exists:
                     return False, f"❌ Бан {ban_id} не существует."
 
-                already_unbanned = await conn.fetchval("SELECT 1 FROM server_unban WHERE ban_id = $1", ban_id)
+                already_unbanned = await conn.fetchval("SELECT 1 FROM unban WHERE ban_id = $1", ban_id)
                 if already_unbanned:
                     return False, f"⚠️ Бан {ban_id} уже снят."
 
@@ -233,7 +236,7 @@ class DatabaseManagerSS14:
                     return False, f"❌ При попытке найти имя админа в БД произошла ошибка: Админ с GUID {admin_guid} не найден."
 
                 await conn.execute("""
-                    INSERT INTO server_unban (ban_id, unbanning_admin, unban_time)
+                    INSERT INTO unban (ban_id, unbanning_admin, unban_time)
                     VALUES ($1, $2, $3::timestamptz)
                 """, ban_id, admin_guid, unban_time)
 
@@ -403,30 +406,83 @@ class DatabaseManagerSS14:
         finally:
             await conn.close()
 
-    async def delete_sponsor(self, guid: str, db_name: str = 'mrp_sponsor'):
+    async def get_active_sponsor_guids(self, db_name: str = 'mrp_sponsor'):
+        """
+        Возвращает список GUID (user_id) спонсоров с активной подпиской.
+        Активной считается запись без даты окончания либо с датой окончания в будущем.
+        """
         conn = await self.get_connection(db_name)
         try:
-            async with conn.transaction():
-                await conn.execute("DELETE FROM sponsors WHERE user_id = $1", guid)
-                return True
+            rows = await conn.fetch("""
+                SELECT user_id FROM sponsors
+                WHERE expire_date IS NULL OR expire_date > now()
+            """)
+            return [r['user_id'] for r in rows]
         except Exception as e:
-            return False, f"Ошибка: {e}"
+            print(f"Ошибка БД (get_active_sponsor_guids): {e}")
+            return []
         finally:
             await conn.close()
 
-    async def add_sponsor(self, guid: str, player_name: str, donate_name: str, tier: str, ooccolor: str, have_priority_join: bool, markings: str, extra_slots: int, expire_date: datetime, allow_job: bool, db_name: str = 'mrp_sponsor'):
+    async def get_discord_ids_by_guids(self, guids: list, db_name: str = 'mrp'):
+        """
+        Возвращает dict {GUID(str): discord_id} для переданного списка GUID.
+        Связка берётся из таблицы discord_user основной БД.
+        """
+        if not guids:
+            return {}
+        conn = await self.get_connection(db_name)
+        try:
+            rows = await conn.fetch(
+                "SELECT user_id, discord_id FROM discord_user WHERE user_id = ANY($1::uuid[])",
+                guids
+            )
+            return {str(r['user_id']): r['discord_id'] for r in rows}
+        except Exception as e:
+            print(f"Ошибка БД (get_discord_ids_by_guids): {e}")
+            return {}
+        finally:
+            await conn.close()
+
+    async def delete_sponsor(self, guid: str, db_name: str = 'mrp_sponsor'):
+        """Удаляет спонсора"""
+        conn = await self.get_connection(db_name)
+        try:
+            async with conn.transaction():
+                result = await conn.execute("DELETE FROM sponsors WHERE user_id = $1", guid)
+                deleted = not result.endswith(" 0")
+                return deleted, ("ok" if deleted else "not_found")
+        except Exception as e:
+            return False, f"Ошибка БД: {e}"
+        finally:
+            await conn.close()
+
+    async def add_sponsor(self, guid: str, player_name: str, donate_name: str, tier: int, ooccolor: str, have_priority_join: bool, markings: list, extra_slots: int, expire_date: datetime, allow_job: bool, db_name: str = 'mrp_sponsor'):
+        """
+        Добавляет спонсора. Возвращает (ok: bool, info: str):
+          (True, 'ok') - запись создана
+          (False, 'exists') - спонсор уже есть, сначала нужно удалить
+          (False, 'Ошибка БД:') - ошибка вставки
+        """
         conn = await self.get_connection(db_name)
         try:
             async with conn.transaction():
                 if await conn.fetchval("SELECT 1 FROM sponsors WHERE user_id = $1", guid):
-                    return False
+                    return False, "exists"
+
+                markings_list = list(markings) if markings else []
+                markings_udt = await conn.fetchval("""
+                    SELECT udt_name FROM information_schema.columns
+                    WHERE table_name = 'sponsors' AND column_name = 'allowed_markings'
+                """)
+                markings_param = json.dumps(markings_list) if markings_udt in ('jsonb', 'json') else markings_list
 
                 await conn.execute("""
                     INSERT INTO sponsors (user_id, player_name, donate_name, tier, ooccolor, have_priority_join, allowed_markings, extra_slots, expire_date, allow_job)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10)
-                """, guid, player_name, donate_name, tier, ooccolor, have_priority_join, markings, extra_slots, expire_date, allow_job)
-                return True
+                """, guid, player_name, donate_name, tier, ooccolor, have_priority_join, markings_param, extra_slots, expire_date, allow_job)
+                return True, "ok"
         except Exception as e:
-            return False, f"Ошибка: {e}"
+            return False, f"Ошибка БД: {e}"
         finally:
             await conn.close()
