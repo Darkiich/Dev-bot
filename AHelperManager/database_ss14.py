@@ -40,6 +40,63 @@ class DatabaseManagerSS14:
         dsn = f"postgres://{params['user']}:{params['password']}@{params['host']}:{params['port']}/{params['database']}"
         return await asyncpg.connect(dsn)
 
+    async def get_databases_size(self, db_name: str = 'mrp'):
+        """
+        Возвращает размеры баз ss14, ss14_dev и sponsors на сервере PostgreSQL.
+        Для ss14 и ss14_dev дополнительно считает размер таблиц admin_log и admin_log_player.
+        Формат: [{'datname': str, 'size': int, 'tables': [{'name': str, 'size': int|None}]|None}].
+        При ошибке — None.
+        """
+        conn = await self.get_connection(db_name)
+        try:
+            targets = [DATABASE_MRP, DATABASE_DEV, DATABASE_MRP_SPONSOR]
+            rows = await conn.fetch("""
+                SELECT datname, pg_database_size(datname) AS size
+                FROM pg_database
+                WHERE datname = ANY($1::text[])
+                ORDER BY size DESC
+            """, targets)
+            result = [{'datname': r['datname'], 'size': int(r['size']), 'tables': None} for r in rows]
+        except Exception as e:
+            print(f"Ошибка БД (get_databases_size): {e}")
+            return None
+        finally:
+            await conn.close()
+
+        tracked_tables = ['admin_log', 'admin_log_player']
+        conn_by_datname = {DATABASE_MRP: 'mrp', DATABASE_DEV: 'dev'}
+        for entry in result:
+            conn_name = conn_by_datname.get(entry['datname'])
+            if conn_name is None:
+                continue
+            try:
+                entry['tables'] = await self.get_tables_size(tracked_tables, conn_name)
+            except Exception as e:
+                print(f"Ошибка БД (tables {entry['datname']}): {e}")
+                entry['tables'] = None
+        return result
+
+    async def get_tables_size(self, tables: list, db_name: str = 'mrp'):
+        """
+        Возвращает размеры указанных таблиц (вместе с индексами) в текущей БД.
+        [{'name': str, 'size': int|None}] в порядке списка; None — таблицы нет.
+        """
+        conn = await self.get_connection(db_name)
+        try:
+            rows = await conn.fetch("""
+                SELECT c.relname AS name, pg_total_relation_size(c.oid) AS size
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE c.relname = ANY($1::text[]) AND n.nspname = 'public'
+            """, tables)
+            found = {r['name']: int(r['size']) for r in rows}
+            return [{'name': t, 'size': found.get(t)} for t in tables]
+        except Exception as e:
+            print(f"Ошибка БД (get_tables_size): {e}")
+            return None
+        finally:
+            await conn.close()
+
     async def get_admin_name(self, guid: str, db_name: str = 'mrp'):
         """
         Получает имя администратора по GUID.
