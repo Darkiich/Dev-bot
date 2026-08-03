@@ -21,6 +21,15 @@ def make_bar(ratio: float, length: int = 20) -> str:
     return "█" * filled + "░" * (length - filled)
 
 
+def get_state(ratio: float) -> tuple[int, str]:
+    """Цвет и текстовый статус по заполненности конкретной БД."""
+    if ratio >= 1.0:
+        return 0xFF0000, "🔴 Порог превышен"
+    if ratio >= 0.9:
+        return 0xFFA500, "🟠 Близко к порогу"
+    return 0x2ECC71, "🟢 В норме"
+
+
 @has_any_role(*ROLE_ACCESS_TOP_HEADS)
 @bot.command(name="db_size")
 async def db_size_command(ctx):
@@ -29,36 +38,31 @@ async def db_size_command(ctx):
         await ctx.send("❌ Не удалось получить размер БД. Проверь подключение.")
         return
 
-    total = sum(d['size'] for d in databases)
     limit_bytes = DB_SIZE_LIMIT_GB * GB
-    ratio = total / limit_bytes if limit_bytes else 0.0
+    embed = Embed(title="Занято места в БД", color=0x2ECC71)
 
-    if ratio >= 1.0:
-        color = 0xFF0000
-        state = "🔴 Порог превышен"
-    elif ratio >= 0.9:
-        color = 0xFFA500
-        state = "🟠 Близко к порогу"
-    else:
-        color = 0x2ECC71
-        state = "🟢 В норме"
+    if not databases:
+        embed.add_field(name="По базам", value="нет данных", inline=False)
+        await ctx.send(embed=embed)
+        return
 
-    embed = Embed(title="Занято места в БД", color=color)
-    embed.add_field(
-        name="Суммарный размер",
-        value=(
-            f"**{fmt_size(total)}** / {DB_SIZE_LIMIT_GB} ГБ  ({ratio * 100:.1f}%)\n"
-            f"`{make_bar(ratio)}`\n{state}"
-        ),
-        inline=False,
-    )
-
-    lines = []
+    worst_ratio = 0.0
     for d in databases:
-        lines.append(f"• `{d['datname']}` — {fmt_size(d['size'])}")
+        ratio = d['size'] / limit_bytes if limit_bytes else 0.0
+        worst_ratio = max(worst_ratio, ratio)
+        _, state = get_state(ratio)
+
+        lines = [
+            f"**{fmt_size(d['size'])}** / {DB_SIZE_LIMIT_GB} ГБ  ({ratio * 100:.1f}%)",
+            f"`{make_bar(ratio)}`",
+            state,
+        ]
         for t in (d.get('tables') or []):
             tsize = fmt_size(t['size']) if t['size'] is not None else "—"
             lines.append(f"　└ {t['name']}: {tsize}")
-    embed.add_field(name="По базам", value="\n".join(lines) or "нет данных", inline=False)
+
+        embed.add_field(name=f"`{d['datname']}`", value="\n".join(lines), inline=False)
+
+    embed.color = get_state(worst_ratio)[0]
 
     await ctx.send(embed=embed)

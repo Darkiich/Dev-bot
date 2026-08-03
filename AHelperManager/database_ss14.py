@@ -43,14 +43,14 @@ class DatabaseManagerSS14:
 
     async def get_databases_size(self, db_name: str = 'mrp'):
         """
-        Возвращает размеры баз ss14, ss14_dev и sponsors на сервере PostgreSQL.
-        Для ss14 и ss14_dev дополнительно считает размер таблиц admin_log и admin_log_player.
+        Возвращает размеры баз ss14 и ss14_dev
+        Для каждой из них дополнительно считает размер таблиц admin_log и admin_log_player.
         Формат: [{'datname': str, 'size': int, 'tables': [{'name': str, 'size': int|None}]|None}].
         При ошибке — None.
         """
         conn = await self.get_connection(db_name)
         try:
-            targets = [DATABASE_MRP, DATABASE_DEV, DATABASE_MRP_SPONSOR]
+            targets = [DATABASE_MRP, DATABASE_DEV]
             rows = await conn.fetch("""
                 SELECT datname, pg_database_size(datname) AS size
                 FROM pg_database
