@@ -116,9 +116,8 @@ async def resolve_member(guild: disnake.Guild, ds_id) -> disnake.Member | None:
 
 
 def role_manage_problem(member: disnake.Member, role: disnake.Role) -> str | None:
-
-    guild = member.guild
-    me = guild.me
+    """Почему бот не сможет тронуть роль. None если препятствий нет."""
+    me = member.guild.me
 
     if me is None:
         return "бот не найден среди участников сервера"
@@ -132,14 +131,6 @@ def role_manage_problem(member: disnake.Member, role: disnake.Role) -> str | Non
     if role >= me.top_role:
         return f"роль «{role.name}» не ниже роли бота «{me.top_role.name}», подними бота выше"
 
-    if member.id == guild.owner_id:
-        return "это владелец сервера, его роли Discord не даёт менять никому"
-
-    if member.top_role >= me.top_role:
-        return (
-            f"роль участника «{member.top_role.name}» не ниже роли бота "
-            f"«{me.top_role.name}», бот управляет только теми, кто ниже"
-        )
 
     return None
 
