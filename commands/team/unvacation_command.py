@@ -21,7 +21,7 @@ USAGE = (
 
 
 @bot.command(name="unvacation", aliases=["unvac", "vacation_off"])
-# @has_any_role(*ROLE_ACCESS_HEADS)
+@has_any_role(*ROLE_ACCESS_HEADS)
 async def unvacation_command(ctx, member: disnake.Member, *, comment: str = ""):
     """Снимает отпуск досрочно: чистит БД, снимает роль и оповещает канал."""
     ok, info = await vacation_db.delete_vacation(member.id)

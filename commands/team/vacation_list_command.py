@@ -52,7 +52,7 @@ def _add_group(embed: disnake.Embed, title: str, lines: list[str]) -> bool:
 
 
 @bot.command(name="vacations", aliases=["vacation_list", "otpuska"])
-# @has_any_role(*GENERAL_ACCESS)
+@has_any_role(*GENERAL_ACCESS)
 async def vacations_command(ctx):
     """Показывает, кто сейчас в отпуске и у кого отпуск запланирован."""
     rows = await vacation_db.get_all_vacations()

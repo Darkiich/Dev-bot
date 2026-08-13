@@ -37,7 +37,7 @@ USAGE = (
 
 
 @bot.command(name="vacation", aliases=["vac", "otpusk"])
-# @has_any_role(*ROLE_ACCESS_HEADS)
+@has_any_role(*ROLE_ACCESS_HEADS)
 async def vacation_command(ctx, member: disnake.Member, date: str, *, rest: str = ""):
     """Выдаёт участнику отпуск до указанной даты, пишет его в БД и оповещает канал."""
     if member.bot:
