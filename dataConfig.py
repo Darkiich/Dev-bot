@@ -91,8 +91,6 @@ CHANNEL_LOG_AUTH_DISCORD = 1372556297773256795
 CHANNEL_STATUS_MESSAGE = 1320771026019422329
 CHANNEL_VALENTINE = 1471999161376313427
 
-VACATION_ROLE_ID = 1437106179389128764
-
 SPONSOR_ROLE_ID = 1047486419960082474
 
 ADMIN_GUID = get_env("ADMIN_GUID")
@@ -114,6 +112,33 @@ MY_DS_ID = 568092953948454922
 DB_SIZE_LIMIT_GB = 18
 DB_SIZE_CHECK_INTERVAL_MIN = 60
 DB_SIZE_ALERT_CHANNEL_ID = LOG_CHANNEL_ID
+
+
+#  Система отпусков команды проекта
+# Роль, которая выдаётся на время отпуска
+VACATION_ROLE_ID = 1309454737032216617
+
+# Канал, куда бот пишет о начале и окончании отпусков
+VACATION_CHANNEL_ID = 1222475582953099264
+
+# Как часто проверять в минутах
+VACATION_CHECK_INTERVAL_MIN = 60
+
+# Максимальная длительность отпуска, дней
+VACATION_MAX_DAYS = 365
+
+# Снимать роль отпуска с тех, кого нет в базе отпусков
+VACATION_ROLE_STRICT_SYNC = True
+
+# Часовой пояс, в котором считаются даты отпусков
+VACATION_TIMEZONE = "Europe/Moscow"
+
+VACATION_DB_HOST = get_env("VACATION_DB_HOST")
+VACATION_DB_PORT = get_env("VACATION_DB_PORT")
+VACATION_DB_USER = get_env("VACATION_DB_USER")
+VACATION_DB_PASS = get_env("VACATION_DB_PASS")
+VACATION_DB_NAME = get_env("VACATION_DB_NAME")
+VACATION_DB_TABLE = get_env("VACATION_DB_TABLE")
 
 VALENTINE_IMAGE_PATH = "src/valentine_card/image_valentine.png"
 

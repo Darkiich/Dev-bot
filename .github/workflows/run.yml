@@ -46,5 +46,11 @@ jobs:
           DATABASE_USER: ${{ secrets.DATABASE_USER }}
           DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
           DATABASE_PASS: ${{ secrets.DATABASE_PASS }}
+          VACATION_DB_HOST: ${{ secrets.VACATION_DB_HOST }}
+          VACATION_DB_PORT: ${{ secrets.VACATION_DB_PORT }}
+          VACATION_DB_USER: ${{ secrets.VACATION_DB_USER }}
+          VACATION_DB_PASS: ${{ secrets.VACATION_DB_PASS }}
+          VACATION_DB_NAME: ${{ secrets.VACATION_DB_NAME }}
+          VACATION_DB_TABLE: ${{ secrets.VACATION_DB_TABLE }}
 
         run: python main.py

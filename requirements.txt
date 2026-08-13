@@ -16,3 +16,6 @@ requests==2.32.5
 typing_extensions==4.15.0
 urllib3==2.5.0
 yarl==1.20.1
+tzdata==2025.2
+aiomysql==0.3.2
+PyMySQL==1.2.0
