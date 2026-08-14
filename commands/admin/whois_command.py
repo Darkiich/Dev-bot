@@ -70,7 +70,7 @@ def _multiaccounts(data, related) -> list:
 
 
 '''Команда для сбора всей информации об игроке в одну карточку'''
-# @has_any_role(*ROLE_ACCESS_ADMIN)
+@has_any_role(*ROLE_ACCESS_ADMIN)
 @bot.command(name="whois")
 async def whois_command(ctx, username_or_ckey: str = None, server: str = "mrp"):
     if server not in ("mrp", "dev"):
