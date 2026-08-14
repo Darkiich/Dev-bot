@@ -173,12 +173,43 @@ class DatabaseManagerSS14:
             LEFT JOIN player p ON b.banning_admin = p.user_id
             LEFT JOIN unban u ON b.ban_id = u.ban_id
             LEFT JOIN player p2 ON u.unbanning_admin = p2.user_id
-            WHERE bp.user_id = (
+            WHERE bp.user_id IN (
                 SELECT user_id FROM player WHERE last_seen_user_name = $1
             )
             AND b.type = 0
             ORDER BY b.ban_id ASC
             """, username)
+            return result
+        except Exception as e:
+            print(f"Ошибка БД: {e}")
+            return None
+        finally:
+            await conn.close()
+
+    async def search_ban_player_by_guid(self, guid, db_name: str = 'mrp'):
+        """
+        Получает историю банов игрока по GUID.
+        Точнее поиска по нику: одно имя могут носить разные аккаунты.
+        """
+        conn = await self.get_connection(db_name)
+        try:
+            result = await conn.fetch("""
+                SELECT 
+                b.ban_id,
+                b.ban_time,
+                b.expiration_time,
+                b.reason,
+                COALESCE(p.last_seen_user_name, 'Неизвестно') AS admin_nickname,
+                u.unban_time,
+                COALESCE(p2.last_seen_user_name, 'Неизвестно') AS unban_admin_nickname
+            FROM ban b
+            INNER JOIN ban_player bp ON b.ban_id = bp.ban_id
+            LEFT JOIN player p ON b.banning_admin = p.user_id
+            LEFT JOIN unban u ON b.ban_id = u.ban_id
+            LEFT JOIN player p2 ON u.unbanning_admin = p2.user_id
+            WHERE bp.user_id = $1 AND b.type = 0
+            ORDER BY b.ban_id ASC
+            """, guid)
             return result
         except Exception as e:
             print(f"Ошибка БД: {e}")
