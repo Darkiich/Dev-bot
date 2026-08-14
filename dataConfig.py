@@ -128,7 +128,7 @@ VACATION_CHECK_INTERVAL_MIN = 60
 VACATION_MAX_DAYS = 365
 
 # Снимать роль отпуска с тех, кого нет в базе отпусков
-VACATION_ROLE_STRICT_SYNC = True
+VACATION_ROLE_STRICT_SYNC = False
 
 # Часовой пояс, в котором считаются даты отпусков
 VACATION_TIMEZONE = "Europe/Moscow"

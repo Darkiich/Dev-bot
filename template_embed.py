@@ -90,7 +90,7 @@ embed_git_help = {
     "color": 0x0099ff,
     "description": "Префикс: `&`",
     "fields": [
-        {"name": "&publish <branch>. По умолчанию master", "value": "Отправляет запрос на паблиш ветки.", "inline": False},
+        {"name": "&publish <branch> <server mrp/dev>. По умолчанию master и mrp", "value": "Отправляет запрос на паблиш ветки.", "inline": False},
         {"name": "&publish_status", "value": "Показывает статус последнего запуска GitHub Actions workflow publish-adt.yml.", "inline": False},
         {"name": "&update <mrp/dev>. По умолчанию mrp", "value": "Обновляет сервер.", "inline": False},
         {"name": "&restart <mrp/dev>. По умолчанию mrp", "value": "Перезагружает сервер.", "inline": False},
