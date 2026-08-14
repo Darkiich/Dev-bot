@@ -7,12 +7,21 @@ from dataConfig import ROLE_ACCESS_MAINTAINER, USER_KEY_GITHUB
 '''Команда для отправки паблиша какой-либо ветки'''
 @has_any_role(*ROLE_ACCESS_MAINTAINER)
 @bot.command(name="publish")
-async def publish_command(ctx, branch: str = "master"):
+async def publish_command(ctx, branch: str = "master", server: str = "mrp"):
     if not branch:
         await ctx.send("Не указана ветка для паблиша")
         return
 
-    url = f"https://api.github.com/repos/AdventureTimeSS14/space_station_ADT/actions/workflows/publish-public.yml/dispatches"
+    url_dev = f"https://github.com/AdventureTimeSS14/space_station_ADT/actions/workflows/publish-testing.yml/dispatches"
+    url_mrp = f"https://api.github.com/repos/AdventureTimeSS14/space_station_ADT/actions/workflows/publish-public.yml/dispatches"
+    
+    if server == "dev":
+        url = url_dev
+    elif server == "mrp":
+        url = url_mrp
+    else:
+        await ctx.send("Некорректный сервер. Допустимые значения: 'dev' или 'mrp'")
+        return
     
     headers = {
         "Accept": "application/vnd.github.v3+json",
