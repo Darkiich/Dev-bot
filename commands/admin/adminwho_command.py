@@ -1,5 +1,5 @@
 from bot_init import bot
-from dataConfig import ADDRESS_MRP, POST_ADMIN_HEADERS, ROLE_ACCESS_ADMIN
+from dataConfig import ADDRESS_MRP, POST_ADMIN_HEADERS, GENERAL_ACCESS
 from template_embed import embed_adminwho
 from disnake.ext.commands import has_any_role
 
@@ -30,7 +30,7 @@ def add_chunked_fields(embed, name, value, max_length=1024, inline=False):
 
 
 '''Команда awho - показывает текущих онлайн-админов сервера MRP'''
-@has_any_role(*ROLE_ACCESS_ADMIN)
+@has_any_role(*GENERAL_ACCESS)
 @bot.command(name="awho")
 async def adminwho_command(ctx):
     url = f"http://{ADDRESS_MRP}:1212/admin/info"
