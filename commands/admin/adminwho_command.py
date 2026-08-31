@@ -69,7 +69,7 @@ async def adminwho_command(ctx):
                         f"({p.get('PingUser', '?')} ms)"
                         for p in deadminned_admins
                     )
-                    add_chunked_fields(embed, "⚪ Деадмин (не отвечают на тикеты)", value, inline=False)
+                    add_chunked_fields(embed, "⚪ Деадмин", value, inline=False)
 
                 total = len(online_admins) + len(deadminned_admins)
                 embed.set_footer(text=f"Всего админов на сервере: {total} | Раунд ID: {data.get('RoundId', '?')}")
