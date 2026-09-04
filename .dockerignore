@@ -1,0 +1,10 @@
+.git
+.github
+__pycache__
+*.pyc
+.env
+venv
+.idea
+.vscode
+LICENSE
+README.md
