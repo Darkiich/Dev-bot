@@ -19,7 +19,7 @@ import disnake
 from disnake.ext import tasks
 
 from bot_init import bot, team_db
-from dataConfig import TEAM_SYNC_INTERVAL_MIN
+from dataConfig import TEAM_SYNC_INTERVAL_MIN, LOG_CHANNEL_ID
 from team_service import COLOR_INFO, announce, collect_import_rows, find_team_guild
 
 logger = logging.getLogger(__name__)
@@ -51,6 +51,25 @@ async def _report(added: int, removed: int):
         embed.add_field(name="Убрано должностей", value=str(removed), inline=True)
 
     await announce(embed)
+
+    if not LOG_CHANNEL_ID:
+        logger.warning("LOG_CHANNEL_ID не задан в конфиге.")
+        return False
+
+    channel = bot.get_channel(LOG_CHANNEL_ID)
+    if channel is None:
+        try:
+            channel = await bot.fetch_channel(LOG_CHANNEL_ID)
+        except (disnake.NotFound, disnake.Forbidden, disnake.HTTPException) as e:
+            logger.error("Канал кадровых действий %s недоступен: %s", LOG_CHANNEL_ID, e)
+            return False
+
+    try:
+        await channel.send(embed=embed)
+        return True
+    except (disnake.Forbidden, disnake.HTTPException) as e:
+        logger.error("Не удалось отправить сообщение в канал кадровых действий: %s", e)
+        return False
 
 
 @tasks.loop(minutes=TEAM_SYNC_INTERVAL_MIN or 30)
