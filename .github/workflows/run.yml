@@ -1,8 +1,8 @@
 name: Run Bot
 
 on:
-  schedule:
-    - cron: '0 */6 * * *'
+  # schedule:
+  #   - cron: '0 */6 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -52,5 +52,10 @@ jobs:
           VACATION_DB_PASS: ${{ secrets.VACATION_DB_PASS }}
           VACATION_DB_NAME: ${{ secrets.VACATION_DB_NAME }}
           VACATION_DB_TABLE: ${{ secrets.VACATION_DB_TABLE }}
+          TEAM_DB_HOST: ${{ secrets.TEAM_DB_HOST }}
+          TEAM_DB_PORT: ${{ secrets.TEAM_DB_PORT }}
+          TEAM_DB_USER: ${{ secrets.TEAM_DB_USER }}
+          TEAM_DB_PASS: ${{ secrets.TEAM_DB_PASS }}
+          TEAM_DB_NAME: ${{ secrets.TEAM_DB_NAME }}
 
         run: python main.py

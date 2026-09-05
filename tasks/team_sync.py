@@ -1,0 +1,85 @@
+"""
+Фоновая сверка состава в базе с ролями Discord.
+
+Нужна для случаев, когда роли раздают руками мимо бота: без сверки такие
+люди не попадут в аналитику, а у снятых вручную останутся мёртвые строки.
+
+Сверка идёт в обе стороны: кого нет в базе - заводит, чья роль пропала -
+убирает. События помечаются source='sync', поэтому в наймы и текучку за
+период не попадают: это не решение главы, а следствие ручной правки.
+
+Роли задача не трогает вообще. Discord тут источник правды, база догоняет.
+"""
+
+import asyncio
+
+import disnake
+
+from disnake.ext import tasks
+
+from bot_init import bot, team_db
+from dataConfig import TEAM_SYNC_INTERVAL_MIN
+from team_service import COLOR_INFO, announce, collect_import_rows, find_team_guild
+
+
+async def _load_members(guild) -> bool:
+    """Догружает список участников, если он ещё не в кэше."""
+    if guild.chunked:
+        return True
+
+    try:
+        await guild.chunk()
+        return True
+    except (disnake.HTTPException, asyncio.TimeoutError) as e:
+        print(f"[team_sync] Не удалось загрузить участников: {e}")
+        return False
+
+
+async def _report(added: int, removed: int):
+    embed = disnake.Embed(
+        title="🔄 Сверка состава",
+        description="Роли меняли мимо бота, база подтянута.",
+        color=COLOR_INFO,
+    )
+
+    if added:
+        embed.add_field(name="Добавлено должностей", value=str(added), inline=True)
+    if removed:
+        embed.add_field(name="Убрано должностей", value=str(removed), inline=True)
+
+    await announce(embed)
+
+
+@tasks.loop(minutes=TEAM_SYNC_INTERVAL_MIN or 30)
+async def team_sync():
+    guild = find_team_guild()
+    if guild is None:
+        print("[team_sync] Сервер с кадровыми ролями не найден")
+        return
+
+    if not await _load_members(guild):
+        return
+
+    rows = collect_import_rows(guild)
+
+    # Пустой список почти наверняка значит недогруженный кэш, а не опустевшую
+    # команду. Сверка в этом случае вычистила бы базу целиком.
+    if not rows:
+        print("[team_sync] Ни одной должностной роли не найдено, сверка пропущена")
+        return
+
+    ok, result = await team_db.sync_members(rows)
+    if not ok:
+        return
+
+    added, removed = result
+    if not added and not removed:
+        return
+
+    print(f"[team_sync] Добавлено {added}, убрано {removed}")
+    await _report(added, removed)
+
+
+@team_sync.before_loop
+async def before_team_sync():
+    await bot.wait_until_ready()

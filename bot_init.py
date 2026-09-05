@@ -2,6 +2,7 @@ from disnake import Intents
 from disnake.ext.commands import Bot
 from AHelperManager.database_ss14 import DatabaseManagerSS14
 from AHelperManager.database_vacation import DatabaseManagerVacation
+from AHelperManager.database_team import DatabaseManagerTeam
 
 intent = Intents.all()
 intent.message_content = True
@@ -18,3 +19,4 @@ bot = Bot(
 
 ss14_db = DatabaseManagerSS14()
 vacation_db = DatabaseManagerVacation()
+team_db = DatabaseManagerTeam()

@@ -140,6 +140,30 @@ VACATION_DB_PASS = get_env("VACATION_DB_PASS")
 VACATION_DB_NAME = get_env("VACATION_DB_NAME")
 VACATION_DB_TABLE = get_env("VACATION_DB_TABLE")
 
+# Кадровая система
+
+# Общая роль команды проекта, выдаётся при найме в любой отдел
+PROJECT_TEAM_ROLE_ID = 1428866954403512513
+
+# Канал с действиями глав, писать в него текстом нельзя
+TEAM_LOG_CHANNEL_ID = 1222475582953099264
+
+# Канал с закреплённым отчётом
+TEAM_REPORT_CHANNEL_ID = 1545818305409847418
+
+# Как часто перерисовывать отчёт, в минутах
+TEAM_REPORT_INTERVAL_MIN = 120
+
+# Как часто сверять состав в базе с ролями Discord, в минутах
+TEAM_SYNC_INTERVAL_MIN = 30
+
+TEAM_DB_HOST = get_env("TEAM_DB_HOST")
+TEAM_DB_PORT = get_env("TEAM_DB_PORT")
+TEAM_DB_USER = get_env("TEAM_DB_USER")
+TEAM_DB_PASS = get_env("TEAM_DB_PASS")
+TEAM_DB_NAME = get_env("TEAM_DB_NAME")
+TEAM_DB_SSL = os.getenv("TEAM_DB_SSL", "prefer")
+
 VALENTINE_IMAGE_PATH = "src/valentine_card/image_valentine.png"
 
 DATA_MRP = {
