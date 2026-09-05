@@ -1,9 +1,12 @@
 import aiohttp
+import logging
 from datetime import datetime, timezone, timedelta
 from bot_init import bot
 from template_embed import embed_status
 from dataConfig import ADDRESS_MRP, ADDRESS_DEV
 from disnake import Embed
+
+logger = logging.getLogger(__name__)
 
 '''Команда для получения информации о сервере МРП/ДЕВа'''
 @bot.command(name="status")
@@ -48,6 +51,8 @@ async def status_command(ctx, server: str = "mrp"):
                         embed.add_field(name=field["name"], value=value, inline=field["inline"])
                     await ctx.send(embed=embed)
                 else:
+                    logger.error("status: сервер %s ответил кодом %d", server, resp.status)
                     await ctx.send(f"Ошибка: код {resp.status}")
     except Exception as e:
+        logger.exception("Ошибка команды status для %s: %s", server, e)
         await ctx.send(f"Ошибка: {e}")

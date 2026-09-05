@@ -6,6 +6,8 @@
 БД это журнал для аналитики, если она отвалится, роли всё равно встанут верно.
 """
 
+import logging
+
 import disnake
 
 from disnake.ext import commands
@@ -29,6 +31,8 @@ COLOR_DEMOTE = 0xF0B232
 COLOR_INFO = 0x5865F2
 
 DEFAULT_REASON = "Причина не указана"
+
+logger = logging.getLogger(__name__)
 
 # Роли не пингуем, людей можно
 MENTIONS = disnake.AllowedMentions(everyone=False, roles=False, users=True)
@@ -401,7 +405,7 @@ def build_move_embed(member, old, new, actor, action: str, reason="") -> disnake
 async def announce(embed: disnake.Embed) -> bool:
     """Пишет эмбед в канал кадровых действий. True при успехе."""
     if not TEAM_LOG_CHANNEL_ID:
-        print("[team] TEAM_LOG_CHANNEL_ID не задан в конфиге.")
+        logger.warning("TEAM_LOG_CHANNEL_ID не задан в конфиге.")
         return False
 
     channel = bot.get_channel(TEAM_LOG_CHANNEL_ID)
@@ -409,14 +413,14 @@ async def announce(embed: disnake.Embed) -> bool:
         try:
             channel = await bot.fetch_channel(TEAM_LOG_CHANNEL_ID)
         except (disnake.NotFound, disnake.Forbidden, disnake.HTTPException) as e:
-            print(f"[team] Канал {TEAM_LOG_CHANNEL_ID} недоступен: {e}")
+            logger.error("Канал кадровых действий %s недоступен: %s", TEAM_LOG_CHANNEL_ID, e)
             return False
 
     try:
         await channel.send(embed=embed)
         return True
     except (disnake.Forbidden, disnake.HTTPException) as e:
-        print(f"[team] Не удалось отправить сообщение в канал: {e}")
+        logger.error("Не удалось отправить сообщение в канал кадровых действий: %s", e)
         return False
 
 
@@ -430,6 +434,7 @@ async def perform_hire(member: disnake.Member, role: disnake.Role, actor, reason
 
     error = actor_problem(actor, member, "hire") or check_hire(member, position)
     if error:
+        logger.info("Отказ в найме: %s -> %s, инициатор %s: %s", member, position.name, actor, error)
         return f"❌ {error}"
 
     notes = await do_hire(member, position, actor, reason)
@@ -439,6 +444,10 @@ async def perform_hire(member: disnake.Member, role: disnake.Role, actor, reason
     )
     sent = await announce(build_hire_embed(member, position, actor, reason))
 
+    logger.info(
+        "Найм: %s (%s) принят в «%s» на «%s» — инициатор %s (%s), причина: %r",
+        member, member.id, position.department_name, position.name, actor, actor.id, reason,
+    )
     return result_lines(
         f"✅ {member.mention} принят в «{position.department_name}» на должность «{position.name}».",
         notes, "" if ok_db else info, sent,
@@ -452,6 +461,7 @@ async def perform_fire(member: disnake.Member, role: disnake.Role, actor, reason
 
     error = actor_problem(actor, member, "fire") or check_fire(member, position)
     if error:
+        logger.info("Отказ в увольнении: %s <- %s, инициатор %s: %s", member, position.name, actor, error)
         return f"❌ {error}"
 
     notes, left_department, left_team = await do_fire(member, position, actor, reason)
@@ -463,6 +473,10 @@ async def perform_fire(member: disnake.Member, role: disnake.Role, actor, reason
         build_fire_embed(member, position, actor, reason, left_department)
     )
 
+    logger.info(
+        "Увольнение: %s (%s) снят с «%s» — инициатор %s (%s), причина: %r",
+        member, member.id, position.name, actor, actor.id, reason,
+    )
     head = f"✅ {member.mention} снят с должности «{position.name}»."
     if left_department:
         head += f" Роль отдела «{position.department_name}» снята."
@@ -484,6 +498,7 @@ async def perform_move(member: disnake.Member, role: disnake.Role, actor,
 
     current, error = check_move(member, position, action)
     if error:
+        logger.info("Отказ в %s: %s, инициатор %s: %s", action, member, actor, error)
         return f"❌ {error}"
 
     notes = await do_move(member, current, position, actor, action, reason)
@@ -494,6 +509,10 @@ async def perform_move(member: disnake.Member, role: disnake.Role, actor,
     )
     sent = await announce(build_move_embed(member, current, position, actor, action, reason))
 
+    logger.info(
+        "%s: %s (%s) «%s» -> «%s» — инициатор %s (%s), причина: %r",
+        action, member, member.id, current.name, position.name, actor, actor.id, reason,
+    )
     label = "повышен" if action == "promote" else "понижен"
     return result_lines(
         f"✅ {member.mention} {label}: «{current.name}» → «{position.name}».",

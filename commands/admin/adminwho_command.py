@@ -1,3 +1,5 @@
+import logging
+
 from bot_init import bot
 from dataConfig import ADDRESS_MRP, POST_ADMIN_HEADERS, GENERAL_ACCESS
 from template_embed import embed_adminwho
@@ -5,6 +7,8 @@ from disnake.ext.commands import has_any_role
 
 import aiohttp
 from disnake import Embed
+
+logger = logging.getLogger(__name__)
 
 
 def add_chunked_fields(embed, name, value, max_length=1024, inline=False):
@@ -39,6 +43,7 @@ async def adminwho_command(ctx):
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=POST_ADMIN_HEADERS) as resp:
                 if resp.status != 200:
+                    logger.error("awho: сервер MRP ответил кодом %d", resp.status)
                     await ctx.send(f"Ошибка: код {resp.status}")
                     return
 
@@ -77,4 +82,5 @@ async def adminwho_command(ctx):
                 await ctx.send(embed=embed)
 
     except Exception as e:
+        logger.exception("Ошибка команды awho: %s", e)
         await ctx.send(f"Ошибка: {e}")

@@ -2,6 +2,7 @@
 Утилиты работы со временем для системы отпусков.
 """
 
+import logging
 import re
 
 from datetime import date, datetime, time, timedelta, timezone
@@ -9,12 +10,15 @@ from zoneinfo import ZoneInfo
 
 from dataConfig import VACATION_TIMEZONE
 
+logger = logging.getLogger(__name__)
+
 try:
     TZ = ZoneInfo(VACATION_TIMEZONE)
 except Exception:
-    print(
-        f"[vacation] Часовой пояс {VACATION_TIMEZONE} недоступен, использую UTC+3. "
-        f"Поставь базу часовых поясов: pip install tzdata"
+    logger.warning(
+        "Часовой пояс %s недоступен, использую UTC+3. "
+        "Поставь базу часовых поясов: pip install tzdata",
+        VACATION_TIMEZONE,
     )
     TZ = timezone(timedelta(hours=3), "MSK")
 

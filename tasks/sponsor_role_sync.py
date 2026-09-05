@@ -1,9 +1,13 @@
+import logging
+
 import disnake
 
 from bot_init import bot, ss14_db
 from disnake.ext import tasks
 
 from dataConfig import SPONSOR_ROLE_ID
+
+logger = logging.getLogger(__name__)
 
 
 def _find_sponsor_guild():
@@ -22,12 +26,12 @@ async def sponsor_role_sync():
       - снимает роль у тех, чья спонсорка истекла или удалена из БД.
     """
     if not SPONSOR_ROLE_ID:
-        print("[sponsor_role_sync] SPONSOR_ROLE_ID не задан в конфиге.")
+        logger.warning("SPONSOR_ROLE_ID не задан в конфиге.")
         return
 
     guild = _find_sponsor_guild()
     if guild is None:
-        print("[sponsor_role_sync] Гильдия с ролью спонсора не найдена.")
+        logger.warning("Гильдия с ролью спонсора не найдена.")
         return
 
     role = guild.get_role(SPONSOR_ROLE_ID)
@@ -57,8 +61,9 @@ async def sponsor_role_sync():
         try:
             await member.add_roles(role, reason="Авто-синхронизация спонсорки (раз в час)")
             granted += 1
+            logger.info("Выдана роль спонсора: %s", discord_id)
         except (disnake.Forbidden, disnake.HTTPException) as e:
-            print(f"[sponsor_role_sync] Не удалось выдать роль {discord_id}: {e}")
+            logger.error("Не удалось выдать роль спонсора %s: %s", discord_id, e)
 
     # Снимаем роль у тех, кто её имеет, но активным спонсором не является
     for member in list(role.members):
@@ -68,11 +73,12 @@ async def sponsor_role_sync():
         try:
             await member.remove_roles(role, reason="Авто-синхронизация спонсорки: подписка истекла")
             revoked += 1
+            logger.info("Снята роль спонсора: %s", member.id)
         except (disnake.Forbidden, disnake.HTTPException) as e:
-            print(f"[sponsor_role_sync] Не удалось снять роль {member.id}: {e}")
+            logger.error("Не удалось снять роль спонсора %s: %s", member.id, e)
 
     if granted or revoked:
-        print(f"[sponsor_role_sync] Выдано: {granted}, снято: {revoked}")
+        logger.info("Синхронизация роли спонсора завершена: выдано %d, снято %d", granted, revoked)
 
 
 @sponsor_role_sync.before_loop

@@ -1,9 +1,12 @@
 import aiohttp
 import json
+import logging
 from bot_init import bot
 from disnake.ext.commands import has_any_role
 from bot_init import ss14_db
 from dataConfig import ADDRESS_MRP, ADMIN_API, ROLE_ACCESS_ADMIN
+
+logger = logging.getLogger(__name__)
 
 '''Команда для бана игрока с сервера MRP'''
 @has_any_role(*ROLE_ACCESS_ADMIN)
@@ -46,8 +49,14 @@ async def ban_command(ctx, nickname: str, reason: str, time: str):
         async with aiohttp.ClientSession() as session:
             async with session.post(url, headers=headers, json=post_data) as resp:
                 if resp.status == 200:
+                    logger.info(
+                        "Бан игрока %s на %s мин выполнен админом %s (%s), причина: %r",
+                        nickname, time, ctx.author, ctx.author.id, reason,
+                    )
                     await ctx.send(f"✅ Игрок: {nickname} забанен на {time} мин по причине '{reason}'")
                 else:
+                    logger.error("Не удалось забанить %s: код %d", nickname, resp.status)
                     await ctx.send(f"Ошибка: код {resp.status}")
     except Exception as e:
+        logger.exception("Ошибка при бане игрока %s: %s", nickname, e)
         await ctx.send(f"Ошибка: {e}")

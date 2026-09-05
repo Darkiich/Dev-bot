@@ -1,8 +1,11 @@
 import aiohttp
+import logging
 
 from bot_init import bot
 from disnake.ext.commands import has_any_role
 from dataConfig import ROLE_ACCESS_MAINTAINER, USER_KEY_GITHUB
+
+logger = logging.getLogger(__name__)
 
 '''Команда для отправки паблиша какой-либо ветки'''
 @has_any_role(*ROLE_ACCESS_MAINTAINER)
@@ -38,9 +41,12 @@ async def publish_command(ctx, branch: str = "master", server: str = "mrp"):
         async with aiohttp.ClientSession() as session:
             async with session.post(url=url, headers=headers, json=data) as resp:
                 if resp.status == 204:
+                    logger.info("Паблиш ветки '%s' на %s запущен пользователем %s (%s)", branch, server, ctx.author, ctx.author.id)
                     await ctx.send(f"Код {resp.status}. Запрос на паблиш отправлен")
                 else:
                     body = (await resp.text())[:500]
+                    logger.error("Паблиш ветки '%s' на %s не отправлен: код %d", branch, server, resp.status)
                     await ctx.send(f"Код {resp.status}. Запрос на паблиш не отправлен\n```{body}```")
     except Exception as e:
+        logger.exception("Ошибка при отправке запроса на паблиш '%s'/%s: %s", branch, server, e)
         await ctx.send(f"Ошибка при отправке запроса: {e}")

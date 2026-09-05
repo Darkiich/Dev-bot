@@ -1,9 +1,12 @@
 import aiohttp
 import json
+import logging
 from bot_init import bot
 from disnake.ext.commands import has_any_role
 from bot_init import ss14_db
 from dataConfig import ADDRESS_MRP, ADMIN_API, ROLE_ACCESS_ADMIN
+
+logger = logging.getLogger(__name__)
 
 '''Команда для кика игрока с сервера MRP'''
 @has_any_role(*ROLE_ACCESS_ADMIN)
@@ -42,8 +45,11 @@ async def kick_command(ctx, nickname: str, reason: str):
         async with aiohttp.ClientSession() as session:
             async with session.post(url, headers=headers, json=post_data) as resp:
                 if resp.status == 200:
+                    logger.info("Кик игрока %s выполнен админом %s (%s), причина: %r", nickname, ctx.author, ctx.author.id, reason)
                     await ctx.send("✅ Кик выполнен.")
                 else:
+                    logger.error("Не удалось кикнуть %s: код %d", nickname, resp.status)
                     await ctx.send(f"Ошибка: код {resp.status}")
     except Exception as e:
+        logger.exception("Ошибка при кике игрока %s: %s", nickname, e)
         await ctx.send(f"Ошибка: {e}")

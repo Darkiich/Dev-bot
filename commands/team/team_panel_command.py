@@ -13,6 +13,8 @@
 Кнопки и команды зовут одни и те же perform_* из team_service.
 """
 
+import logging
+
 import disnake
 
 from disnake.ext.commands import has_any_role
@@ -33,6 +35,8 @@ from team_service import (
 )
 
 STEP_TIMEOUT = 180
+
+logger = logging.getLogger(__name__)
 
 TITLES = {
     "hire": "Найм",
@@ -242,11 +246,13 @@ class TeamPanel(disnake.ui.View):
 
     async def _start(self, inter, action: str):
         if not _allowed(inter.author):
+            logger.warning("Отказано в доступе к панели кадров (%s): %s (%s)", action, inter.author, inter.author.id)
             await inter.response.send_message(
                 "Кадровые действия доступны только главам.", ephemeral=True
             )
             return
 
+        logger.info("Панель кадров: %s начал '%s'", inter.author, action)
         await inter.response.send_message(
             content=f"**{TITLES[action]}**. Выбери участника:",
             view=MemberStep(action, inter),

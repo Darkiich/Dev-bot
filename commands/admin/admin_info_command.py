@@ -1,3 +1,5 @@
+import logging
+
 from bot_init import bot
 from dataConfig import ADDRESS_MRP, POST_ADMIN_HEADERS, ROLE_ACCESS_ADMIN
 from template_embed import embed_admin_info
@@ -5,6 +7,9 @@ from disnake.ext.commands import has_any_role
 
 import aiohttp
 from disnake import Embed
+
+logger = logging.getLogger(__name__)
+
 
 def add_chunked_fields(embed, name, value, max_length=1024, inline=False):
     """Разбивает длинное значение на несколько полей."""
@@ -47,10 +52,13 @@ async def admin_info_command(ctx):
                                 add_chunked_fields(embed, field["name"], value, inline=field["inline"])
                             else:
                                 embed.add_field(name=field["name"], value=value, inline=field["inline"])
-                        except:
+                        except Exception as field_error:
+                            logger.warning("Не удалось построить поле '%s' в admin_info: %s", field["name"], field_error)
                             embed.add_field(name=field["name"], value="Ошибка", inline=field["inline"])
                     await ctx.send(embed=embed)
                 else:
+                    logger.error("admin_info: сервер MRP ответил кодом %d", resp.status)
                     await ctx.send(f"Ошибка: код {resp.status}")
     except Exception as e:
+        logger.exception("Ошибка команды admin_info: %s", e)
         await ctx.send(f"Ошибка: {e}")

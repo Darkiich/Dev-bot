@@ -2,6 +2,8 @@
 Общая логика системы отпусков разбора аргументов, роль отпуска, оформление эмбедов и отправка сообщений в канал отпусков.
 """
 
+import logging
+
 import disnake
 
 from datetime import datetime
@@ -30,6 +32,9 @@ COLOR_INFO = 0x5865F2 # справочные эмбеды
 DEFAULT_REASON = "Причина не указана"
 
 #  Разбор аргументов команды
+logger = logging.getLogger(__name__)
+
+
 def parse_vacation_args(date_arg: str, rest: str = "") -> tuple[datetime | None, datetime | None, str, str | None]:
     """
     Разбирает `<дата> [время] [причина]`, возвращает (start, end, reason, error).
@@ -153,10 +158,13 @@ async def grant_vacation_role(member: disnake.Member, reason: str) -> tuple[bool
 
     try:
         await member.add_roles(role, reason=reason)
+        logger.info("Выдана роль отпуска: %s (%s), причина: %r", member, member.id, reason)
         return True, f"✅ Роль **{role.name}** выдана."
     except disnake.Forbidden:
+        logger.warning("Не удалось выдать роль отпуска %s: нет прав", member.id)
         return False, f"⚠️ Роль не выдана: {role_manage_problem(member, role) or 'Discord отказал (403)'}."
     except disnake.HTTPException as e:
+        logger.error("Не удалось выдать роль отпуска %s: %s", member.id, e)
         return False, f"⚠️ Роль не выдана: ошибка Discord ({e})."
 
 
@@ -178,10 +186,13 @@ async def revoke_vacation_role(member: disnake.Member, reason: str) -> tuple[boo
 
     try:
         await member.remove_roles(role, reason=reason)
+        logger.info("Снята роль отпуска: %s (%s), причина: %r", member, member.id, reason)
         return True, f"✅ Роль **{role.name}** снята."
     except disnake.Forbidden:
+        logger.warning("Не удалось снять роль отпуска %s: нет прав", member.id)
         return False, f"⚠️ Роль не снята: {role_manage_problem(member, role) or 'Discord отказал (403)'}."
     except disnake.HTTPException as e:
+        logger.error("Не удалось снять роль отпуска %s: %s", member.id, e)
         return False, f"⚠️ Роль не снята: ошибка Discord ({e})."
 
 
@@ -229,7 +240,7 @@ def build_cancel_embed(ds_id, member, comment=None) -> disnake.Embed:
 async def announce(embed: disnake.Embed) -> bool:
     """Отправляет эмбед в канал отпусков. Возвращает True при успехе."""
     if not VACATION_CHANNEL_ID:
-        print("[vacation] VACATION_CHANNEL_ID не задан в конфиге.")
+        logger.warning("VACATION_CHANNEL_ID не задан в конфиге.")
         return False
 
     channel = bot.get_channel(VACATION_CHANNEL_ID)
@@ -237,14 +248,14 @@ async def announce(embed: disnake.Embed) -> bool:
         try:
             channel = await bot.fetch_channel(VACATION_CHANNEL_ID)
         except (disnake.NotFound, disnake.Forbidden, disnake.HTTPException) as e:
-            print(f"[vacation] Канал {VACATION_CHANNEL_ID} недоступен: {e}")
+            logger.error("Канал отпусков %s недоступен: %s", VACATION_CHANNEL_ID, e)
             return False
 
     try:
         await channel.send(embed=embed)
         return True
     except (disnake.Forbidden, disnake.HTTPException) as e:
-        print(f"[vacation] Не удалось отправить сообщение в канал: {e}")
+        logger.error("Не удалось отправить сообщение в канал отпусков: %s", e)
         return False
 
 

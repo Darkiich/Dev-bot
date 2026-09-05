@@ -9,6 +9,8 @@
 но не попадают в наймы за период, иначе аналитика покажет всплеск.
 """
 
+import logging
+
 import disnake
 
 from disnake.ext.commands import has_any_role
@@ -28,6 +30,8 @@ from team_service import (
 USAGE = "**Использование:** `&team_import` - показывает предпросмотр и просит подтвердить."
 
 TIMEOUT = 120
+
+logger = logging.getLogger(__name__)
 
 
 def _preview(guild, rows) -> disnake.Embed:
@@ -94,10 +98,15 @@ class ConfirmImport(disnake.ui.View):
         self.stop()
 
         if not ok:
+            logger.error("Импорт состава не прошёл (инициатор %s): %s", inter.author, info)
             await inter.followup.send(f"❌ Импорт не прошёл: `{info}`")
             return
 
         skipped = len(self.rows) - info
+        logger.info(
+            "Импорт состава выполнен инициатором %s (%s): импортировано %d, пропущено %d",
+            inter.author, inter.author.id, info, skipped,
+        )
         text = f"✅ Импортировано должностей: **{info}**."
         if skipped:
             text += f" Уже были в базе: {skipped}."
@@ -108,6 +117,7 @@ class ConfirmImport(disnake.ui.View):
     async def cancel(self, button, inter):
         self._lock()
         self.stop()
+        logger.info("Импорт состава отменён инициатором %s (%s)", inter.author, inter.author.id)
         await inter.response.edit_message(content="Импорт отменён.", view=self)
 
 
@@ -118,8 +128,11 @@ async def team_import_command(ctx):
     rows = collect_import_rows(ctx.guild)
 
     if not rows:
+        logger.warning("team_import: не найдено ролей для импорта (запросил %s)", ctx.author)
         await ctx.send("Не нашёл никого с должностными ролями. Проверь ID ролей в `team_departments.py`.")
         return
+
+    logger.info("team_import: предпросмотр запрошен %s (%s), должностей: %d", ctx.author, ctx.author.id, len(rows))
 
     view = ConfirmImport(ctx.author.id, rows)
     view.message = await ctx.send(

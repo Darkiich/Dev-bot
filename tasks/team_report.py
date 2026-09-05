@@ -10,6 +10,7 @@
 из ниоткуда хуже, чем показать вчерашние.
 """
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 import disnake
@@ -20,6 +21,8 @@ from bot_init import bot, team_db
 from dataConfig import TEAM_REPORT_CHANNEL_ID, TEAM_REPORT_INTERVAL_MIN
 from team_departments import DEPARTMENTS, department_name, get_ladder
 from team_service import COLOR_INFO
+
+logger = logging.getLogger(__name__)
 
 MOVEMENT_DAYS = 30
 TURNOVER_DAYS = 90
@@ -205,7 +208,7 @@ async def _find_report_message(channel):
             if message.author.id == bot.user.id:
                 return message
     except (disnake.Forbidden, disnake.HTTPException) as e:
-        print(f"[team_report] Не удалось прочитать закреплённые: {e}")
+        logger.error("Не удалось прочитать закреплённые сообщения: %s", e)
     return None
 
 
@@ -219,12 +222,12 @@ async def team_report():
         try:
             channel = await bot.fetch_channel(TEAM_REPORT_CHANNEL_ID)
         except (disnake.NotFound, disnake.Forbidden, disnake.HTTPException) as e:
-            print(f"[team_report] Канал {TEAM_REPORT_CHANNEL_ID} недоступен: {e}")
+            logger.error("Канал отчёта %s недоступен: %s", TEAM_REPORT_CHANNEL_ID, e)
             return
 
     data = await team_db.get_report_data(MOVEMENT_DAYS, TURNOVER_DAYS)
     if data is None:
-        print("[team_report] База не ответила, отчёт оставлен как был")
+        logger.warning("База не ответила, отчёт кадров оставлен как был")
         return
 
     embeds = build_report(data)
@@ -233,12 +236,13 @@ async def team_report():
     try:
         if message:
             await message.edit(embeds=embeds)
+            logger.debug("Отчёт кадров обновлён")
         else:
             message = await channel.send(embeds=embeds)
             await message.pin()
-            print("[team_report] Отчёт создан и закреплён")
+            logger.info("Отчёт кадров создан и закреплён")
     except (disnake.Forbidden, disnake.HTTPException) as e:
-        print(f"[team_report] Не удалось обновить отчёт: {e}")
+        logger.error("Не удалось обновить отчёт кадров: %s", e)
 
 
 @team_report.before_loop

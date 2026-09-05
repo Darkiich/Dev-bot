@@ -3,6 +3,7 @@
 """
 
 import asyncio
+import logging
 import re
 
 from datetime import datetime
@@ -38,6 +39,8 @@ CONNECT_TIMEOUT = 15
 ATTEMPTS = 2
 
 DEFAULT_REASON_LIMIT = 255
+
+logger = logging.getLogger(__name__)
 
 
 def _session_timezone() -> str:
@@ -89,7 +92,7 @@ class DatabaseManagerVacation:
             async with conn.cursor() as cur:
                 await cur.execute("SET time_zone = %s", (_session_timezone(),))
         except Exception as e:
-            print(f"[vacation_db] Не удалось задать часовой пояс сессии: {e}")
+            logger.warning("Не удалось задать часовой пояс сессии: %s", e)
 
         if not self._schema_checked:
             async with self._lock:
@@ -109,9 +112,9 @@ class DatabaseManagerVacation:
                 return await operation(conn)
             except _CONNECTION_ERRORS as e:
                 last_error = e
-                print(
-                    f"[vacation_db] {label}: соединение оборвалось "
-                    f"(попытка {attempt}/{ATTEMPTS}): {type(e).__name__}: {e}"
+                logger.warning(
+                    "%s: соединение оборвалось (попытка %d/%d): %s: %s",
+                    label, attempt, ATTEMPTS, type(e).__name__, e,
                 )
             finally:
                 if conn is not None:
@@ -133,9 +136,9 @@ class DatabaseManagerVacation:
             await self._load_columns(conn)
 
         if not self._col_types:
-            print(
-                f"[vacation_db] Таблица {self.table} не найдена в базе {self.database}. "
-                f"Проверь VACATION_DB_NAME / VACATION_DB_TABLE."
+            logger.error(
+                "Таблица %s не найдена в базе %s. Проверь VACATION_DB_NAME / VACATION_DB_TABLE.",
+                self.table, self.database,
             )
             return
 
@@ -160,9 +163,9 @@ class DatabaseManagerVacation:
                         f"MODIFY COLUMN `{column}` datetime DEFAULT NULL"
                     )
                     self._col_types[column] = "datetime"
-                    print(f"[vacation_db] Колонка {column}: date -> datetime")
+                    logger.info("Колонка %s переведена: date -> datetime", column)
                 except Exception as e:
-                    print(f"[vacation_db] Не перевести {column} в datetime: {e}")
+                    logger.exception("Не удалось перевести колонку %s в datetime: %s", column, e)
 
     async def _load_columns(self, conn):
         """Читает реальные типы колонок таблицы из information_schema."""
@@ -193,11 +196,11 @@ class DatabaseManagerVacation:
                         PRIMARY KEY (ds_id)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """)
-            print(f"[vacation_db] Создана таблица {self.table}")
+            logger.info("Создана таблица отпусков %s", self.table)
         except _CONNECTION_ERRORS:
             raise
         except Exception as e:
-            print(f"[vacation_db] Не удалось создать таблицу {self.table}: {e}")
+            logger.exception("Не удалось создать таблицу %s: %s", self.table, e)
 
     async def _add_missing_columns(self, conn, missing: list):
         """Дописывает недостающие колонки в уже существующую таблицу."""
@@ -215,9 +218,9 @@ class DatabaseManagerVacation:
                         f"ALTER TABLE {self.qtable} ADD COLUMN `{column}` {types[column]}"
                     )
                     self._col_types[column] = types[column].split("(")[0].split()[0]
-                    print(f"[vacation_db] Добавлена колонка {column}")
+                    logger.info("Добавлена колонка %s в таблицу отпусков", column)
                 except Exception as e:
-                    print(f"[vacation_db] Не удалось добавить колонку {column}: {e}")
+                    logger.exception("Не удалось добавить колонку %s: %s", column, e)
 
 
     #  Подгонка значений под реальные типы колонок
@@ -280,7 +283,7 @@ class DatabaseManagerVacation:
             row = await self._run("get_vacation", operation)
             return self._row_to_dict(row) if row else None
         except Exception as e:
-            print(f"[vacation_db] Ошибка get_vacation: {type(e).__name__}: {e}")
+            logger.exception("Ошибка get_vacation: %s: %s", type(e).__name__, e)
             return None
 
     async def get_all_vacations(self) -> list[dict] | None:
@@ -303,7 +306,7 @@ class DatabaseManagerVacation:
             rows = await self._run("get_all_vacations", operation)
             return [self._row_to_dict(r) for r in rows]
         except Exception as e:
-            print(f"[vacation_db] Ошибка get_all_vacations: {type(e).__name__}: {e}")
+            logger.exception("Ошибка get_all_vacations: %s: %s", type(e).__name__, e)
             return None
 
     async def set_vacation(self, ds_id, start: datetime, end: datetime, reason: str) -> tuple[bool, str]:
@@ -351,7 +354,7 @@ class DatabaseManagerVacation:
         try:
             return True, await self._run("set_vacation", operation)
         except Exception as e:
-            print(f"[vacation_db] Ошибка set_vacation: {type(e).__name__}: {e}")
+            logger.exception("Ошибка set_vacation: %s: %s", type(e).__name__, e)
             return False, f"{type(e).__name__}: {e}"
 
     async def delete_vacation(self, ds_id) -> tuple[bool, str]:
@@ -371,5 +374,5 @@ class DatabaseManagerVacation:
             deleted = await self._run("delete_vacation", operation)
             return (True, "ok") if deleted else (False, "not_found")
         except Exception as e:
-            print(f"[vacation_db] Ошибка delete_vacation: {type(e).__name__}: {e}")
+            logger.exception("Ошибка delete_vacation: %s: %s", type(e).__name__, e)
             return False, f"{type(e).__name__}: {e}"

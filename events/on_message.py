@@ -11,10 +11,14 @@
 process_commands. Без этого перестанут работать вообще все команды бота.
 """
 
+import logging
+
 import disnake
 
 from bot_init import bot
 from dataConfig import TEAM_LOG_CHANNEL_ID
+
+logger = logging.getLogger(__name__)
 
 DM_WARNING = (
     "В канале {channel} писать текстом нельзя, туда пишет только бот.\n"
@@ -67,11 +71,16 @@ async def _reject(message):
     try:
         await message.delete()
     except disnake.Forbidden:
-        print("[team] Нет права «Управление сообщениями» в канале кадровых действий.")
+        logger.warning("Нет права «Управление сообщениями» в канале кадровых действий.")
         return
     except (disnake.NotFound, disnake.HTTPException) as e:
-        print(f"[team] Не удалось удалить сообщение: {e}")
+        logger.warning("Не удалось удалить сообщение %s: %s", message.id, e)
         return
+
+    logger.info(
+        "Удалено текстовое сообщение в канале кадровых действий: автор=%s (%s)",
+        message.author, message.author.id,
+    )
 
     if await _notify(message):
         return
@@ -83,7 +92,7 @@ async def _reject(message):
             delete_after=WARNING_LIFETIME,
         )
     except (disnake.Forbidden, disnake.HTTPException) as e:
-        print(f"[team] Не удалось предупредить автора: {e}")
+        logger.warning("Не удалось предупредить автора %s: %s", message.author.id, e)
 
 
 @bot.event

@@ -10,6 +10,7 @@
 """
 
 import asyncio
+import logging
 
 from datetime import datetime, timezone
 
@@ -39,6 +40,8 @@ COMMAND_TIMEOUT = 30
 ATTEMPTS = 2
 
 ACTIONS = ("hire", "fire", "promote", "demote")
+
+logger = logging.getLogger(__name__)
 
 
 def _now():
@@ -91,7 +94,7 @@ class DatabaseManagerTeam:
                 return await operation(conn)
             except _CONNECTION_ERRORS as e:
                 last_error = e
-                print(f"[team_db] {label}: обрыв ({attempt}/{ATTEMPTS}) {type(e).__name__}: {e}")
+                logger.warning("%s: обрыв (%d/%d) %s: %s", label, attempt, ATTEMPTS, type(e).__name__, e)
             finally:
                 if conn is not None:
                     try:
@@ -150,12 +153,12 @@ class DatabaseManagerTeam:
             ):
                 await conn.execute(statement)
 
-            print("[team_db] Схема проверена")
+            logger.info("Схема БД кадров проверена")
         except _CONNECTION_ERRORS:
             raise
         except Exception as e:
             # Прав на DDL может не быть, это не повод падать при старте
-            print(f"[team_db] Не удалось проверить схему: {e}")
+            logger.exception("Не удалось проверить схему БД кадров: %s", e)
 
     # ------------------------------------------------------------------ #
     #  Запись действий
@@ -215,7 +218,7 @@ class DatabaseManagerTeam:
         try:
             return True, await self._run("record_hire", operation)
         except Exception as e:
-            print(f"[team_db] Ошибка record_hire: {type(e).__name__}: {e}")
+            logger.exception("Ошибка record_hire: %s: %s", type(e).__name__, e)
             return False, f"{type(e).__name__}: {e}"
 
     async def record_fire(self, ds_id, ds_name, position, actor_id, actor_name,
@@ -242,7 +245,7 @@ class DatabaseManagerTeam:
         try:
             return True, await self._run("record_fire", operation)
         except Exception as e:
-            print(f"[team_db] Ошибка record_fire: {type(e).__name__}: {e}")
+            logger.exception("Ошибка record_fire: %s: %s", type(e).__name__, e)
             return False, f"{type(e).__name__}: {e}"
 
     async def record_move(self, ds_id, ds_name, old_position, new_position,
@@ -300,7 +303,7 @@ class DatabaseManagerTeam:
         try:
             return True, await self._run("record_move", operation)
         except Exception as e:
-            print(f"[team_db] Ошибка record_move: {type(e).__name__}: {e}")
+            logger.exception("Ошибка record_move: %s: %s", type(e).__name__, e)
             return False, f"{type(e).__name__}: {e}"
 
     async def import_members(self, rows):
@@ -345,7 +348,7 @@ class DatabaseManagerTeam:
         try:
             return True, await self._run("import_members", operation)
         except Exception as e:
-            print(f"[team_db] Ошибка import_members: {type(e).__name__}: {e}")
+            logger.exception("Ошибка import_members: %s: %s", type(e).__name__, e)
             return False, f"{type(e).__name__}: {e}"
 
     async def sync_members(self, rows):
@@ -423,7 +426,7 @@ class DatabaseManagerTeam:
         try:
             return True, await self._run("sync_members", operation)
         except Exception as e:
-            print(f"[team_db] Ошибка sync_members: {type(e).__name__}: {e}")
+            logger.exception("Ошибка sync_members: %s: %s", type(e).__name__, e)
             return False, f"{type(e).__name__}: {e}"
 
     # ------------------------------------------------------------------ #
@@ -444,7 +447,7 @@ class DatabaseManagerTeam:
         try:
             return [dict(r) for r in await self._run("get_member_positions", operation)]
         except Exception as e:
-            print(f"[team_db] Ошибка get_member_positions: {type(e).__name__}: {e}")
+            logger.exception("Ошибка get_member_positions: %s: %s", type(e).__name__, e)
             return None
 
     async def get_department_members(self, department):
@@ -459,7 +462,7 @@ class DatabaseManagerTeam:
         try:
             return [dict(r) for r in await self._run("get_department_members", operation)]
         except Exception as e:
-            print(f"[team_db] Ошибка get_department_members: {type(e).__name__}: {e}")
+            logger.exception("Ошибка get_department_members: %s: %s", type(e).__name__, e)
             return None
 
     async def get_all_members(self):
@@ -470,7 +473,7 @@ class DatabaseManagerTeam:
         try:
             return [dict(r) for r in await self._run("get_all_members", operation)]
         except Exception as e:
-            print(f"[team_db] Ошибка get_all_members: {type(e).__name__}: {e}")
+            logger.exception("Ошибка get_all_members: %s: %s", type(e).__name__, e)
             return None
 
     async def get_events(self, ds_id=None, department=None, limit=20):
@@ -493,7 +496,7 @@ class DatabaseManagerTeam:
         try:
             return [dict(r) for r in await self._run("get_events", operation)]
         except Exception as e:
-            print(f"[team_db] Ошибка get_events: {type(e).__name__}: {e}")
+            logger.exception("Ошибка get_events: %s: %s", type(e).__name__, e)
             return None
 
     async def get_report_data(self, movement_days=30, turnover_days=90):
@@ -568,5 +571,5 @@ class DatabaseManagerTeam:
             data = await self._run("get_report_data", operation)
             return {key: [dict(r) for r in rows] for key, rows in data.items()}
         except Exception as e:
-            print(f"[team_db] Ошибка get_report_data: {type(e).__name__}: {e}")
+            logger.exception("Ошибка get_report_data: %s: %s", type(e).__name__, e)
             return None

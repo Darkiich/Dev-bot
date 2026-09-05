@@ -1,8 +1,11 @@
 import aiohttp
+import logging
 
 from bot_init import bot
 from dataConfig import USER_KEY_GITHUB, ROLE_ACCESS_HEADS
 from disnake.ext.commands import has_any_role
+
+logger = logging.getLogger(__name__)
 
 
 @has_any_role(*ROLE_ACCESS_HEADS)
@@ -19,8 +22,11 @@ async def add_maint_command(ctx, github_login: str):
         async with aiohttp.ClientSession() as session:
             async with session.put(url, headers=headers, json=data) as resp:
                 if resp.status == 200:
+                    logger.info("GitHub: %s добавлен в adt_maintainer (выполнил %s)", github_login, ctx.author)
                     await ctx.send(f"Участник {github_login} добавлен в команду adt_maintainer.")
                 else:
+                    logger.error("add_maint: GitHub API ответил %d для %s", resp.status, github_login)
                     await ctx.send(f"Ошибка {resp.status}: {await resp.text()}")
     except Exception as e:
+        logger.exception("Ошибка add_maint для %s: %s", github_login, e)
         await ctx.send(f"Ошибка: {e}")

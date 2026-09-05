@@ -12,6 +12,7 @@
 """
 
 import asyncio
+import logging
 
 import disnake
 
@@ -20,6 +21,8 @@ from disnake.ext import tasks
 from bot_init import bot, team_db
 from dataConfig import TEAM_SYNC_INTERVAL_MIN
 from team_service import COLOR_INFO, announce, collect_import_rows, find_team_guild
+
+logger = logging.getLogger(__name__)
 
 
 async def _load_members(guild) -> bool:
@@ -31,7 +34,7 @@ async def _load_members(guild) -> bool:
         await guild.chunk()
         return True
     except (disnake.HTTPException, asyncio.TimeoutError) as e:
-        print(f"[team_sync] Не удалось загрузить участников: {e}")
+        logger.error("Не удалось загрузить участников гильдии: %s", e)
         return False
 
 
@@ -54,7 +57,7 @@ async def _report(added: int, removed: int):
 async def team_sync():
     guild = find_team_guild()
     if guild is None:
-        print("[team_sync] Сервер с кадровыми ролями не найден")
+        logger.warning("Сервер с кадровыми ролями не найден")
         return
 
     if not await _load_members(guild):
@@ -65,18 +68,19 @@ async def team_sync():
     # Пустой список почти наверняка значит недогруженный кэш, а не опустевшую
     # команду. Сверка в этом случае вычистила бы базу целиком.
     if not rows:
-        print("[team_sync] Ни одной должностной роли не найдено, сверка пропущена")
+        logger.warning("Ни одной должностной роли не найдено, сверка пропущена")
         return
 
     ok, result = await team_db.sync_members(rows)
     if not ok:
+        logger.error("Сверка состава с БД не удалась")
         return
 
     added, removed = result
     if not added and not removed:
         return
 
-    print(f"[team_sync] Добавлено {added}, убрано {removed}")
+    logger.info("Сверка состава: добавлено %d, убрано %d", added, removed)
     await _report(added, removed)
 
 

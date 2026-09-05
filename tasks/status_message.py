@@ -1,3 +1,5 @@
+import logging
+
 from bot_init import bot
 from datetime import datetime, timezone, timedelta
 from dataConfig import CHANNEL_STATUS_MESSAGE, ADDRESS_MRP
@@ -6,6 +8,9 @@ from template_embed import embed_status
 
 import aiohttp
 from disnake.ext import tasks
+
+logger = logging.getLogger(__name__)
+
 
 @tasks.loop(minutes=2)
 async def status_update():
@@ -41,8 +46,10 @@ async def status_update():
                             value = eval(field["value"])
                         embed.add_field(name=field["name"], value=value, inline=field["inline"])
                 else:
+                    logger.warning("Сервер статуса ответил кодом %d", resp.status)
                     embed = Embed(title="Ошибка", description=f"Код {resp.status}", color=0xff0000)
     except Exception as e:
+        logger.error("Не удалось получить статус сервера: %s", e)
         embed = Embed(title="Ошибка", description=str(e), color=0xff0000)
 
     pinned = []

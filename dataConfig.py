@@ -1,9 +1,12 @@
+import logging
 import os
 import json
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 ROLE_ACCESS_HEADS = [
     1054908932868538449, # Руководство проекта
@@ -68,7 +71,7 @@ def get_env(key: str):
     env = os.getenv(f"{key}")
 
     if not env:
-        print("Ключ секрета не найден")
+        logger.warning("Ключ секрета не найден в .env: %s", key)
 
     return env
 

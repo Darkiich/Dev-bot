@@ -3,6 +3,8 @@
 # Весь этот код взят с репозитория моего братка - https://github.com/Schrodinger71/Dev-bot/blob/c525f3a847a7e3c314ff93409cfd2f9591292a6a/tasks/list_team_task.py#L187
 
 
+import logging
+
 from disnake import Embed
 from disnake.ext import commands, tasks
 from disnake.utils import get
@@ -11,6 +13,8 @@ from dataConfig import ROLE_ACCESS_TOP_HEADS
 
 from bot_init import bot
 from disnake.ext.commands import has_any_role
+
+logger = logging.getLogger(__name__)
 
 roles_team = [
     # Список ролей и их ID
@@ -202,6 +206,7 @@ async def list_team(ctx):
     """
     Команда для отображения состава команды по категориям.
     """
+    logger.info("Команда list_team вызвана %s (%s)", ctx.author, ctx.author.id)
     await ctx.channel.purge(limit=15)
 
     # Обработка каждой категории
@@ -279,8 +284,10 @@ async def list_team_error(ctx, error):
     error - объект ошибки
     """
     if isinstance(error, commands.CheckFailure):
+        logger.warning("Отказано в доступе к list_team: %s (%s)", ctx.author, ctx.author.id)
         await ctx.send("🚫 У вас нет прав на использование этой команды.")
     else:
+        logger.error("Ошибка в команде list_team: %s", error, exc_info=error)
         await ctx.send(f"❗ Произошла ошибка: {error}")
 
 
@@ -291,6 +298,10 @@ async def list_team_task(): # pylint: disable=R0912
     Ожидается, что ID канала уже известен. Выводит полный список команды.
     """
     channel = bot.get_channel(1297158288063987752)  # ID канала
+    if not channel:
+        logger.warning("Канал для list_team_task не найден")
+        return
+
     if channel:
         await channel.purge(limit=15)
 
@@ -372,6 +383,8 @@ async def list_team_task(): # pylint: disable=R0912
                     embed.set_thumbnail(url=admin_role.icon.url)
 
             await channel.send(embed=embed)
+
+    logger.info("list_team_task: список команды опубликован")
 
 
 # 1116612861993689251 - Лидер проекта

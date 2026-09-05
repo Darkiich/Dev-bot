@@ -3,6 +3,8 @@
 у кого она слетела, и убирает роль у тех, кого нет в базе.
 """
 
+import logging
+
 from disnake.ext import tasks
 
 from bot_init import bot, vacation_db
@@ -23,6 +25,8 @@ from vacation_service import (
 )
 from vacation_time import fmt, now_local
 
+logger = logging.getLogger(__name__)
+
 
 # Про кого уже писали в лог, чтобы не повторять одно и то же каждый час
 _REPORTED = set()
@@ -34,7 +38,7 @@ def _report_once(who, status: str):
     if key in _REPORTED:
         return
     _REPORTED.add(key)
-    print(f"[vacation_monitor] {who}: {status.lstrip('✅ℹ️⚠️ ').replace('**', '')}")
+    logger.warning("%s: %s", who, status.lstrip('✅ℹ️⚠️ ').replace('**', ''))
 
 
 async def _finish_vacation(guild, row) -> bool:
@@ -43,7 +47,7 @@ async def _finish_vacation(guild, row) -> bool:
 
     ok, info = await vacation_db.delete_vacation(ds_id)
     if not ok and info != "not_found":
-        print(f"[vacation_monitor] Не удалось удалить запись {ds_id}: {info}")
+        logger.error("Не удалось удалить запись отпуска %s: %s", ds_id, info)
         return False
 
     member = await resolve_member(guild, ds_id)
@@ -55,7 +59,7 @@ async def _finish_vacation(guild, row) -> bool:
 
     await announce(build_end_embed(ds_id, member))
 
-    print(f"[vacation_monitor] Отпуск окончен: {ds_id} (до {fmt(row.get('end_vacation'))})")
+    logger.info("Отпуск окончен: %s (до %s)", ds_id, fmt(row.get('end_vacation')))
     return True
 
 
@@ -78,7 +82,7 @@ async def _begin_vacation(guild, row) -> bool:
         ds_id, member, row.get("end_vacation"), row.get("reason"), scheduled=True
     ))
 
-    print(f"[vacation_monitor] Отпуск начался: {ds_id} (до {fmt(row.get('end_vacation'))})")
+    logger.info("Отпуск начался: %s (до %s)", ds_id, fmt(row.get('end_vacation')))
     return True
 
 
@@ -108,28 +112,28 @@ async def _strict_sync(guild, active_ids: set) -> int:
 async def vacation_monitor():
     """Раз в час сверяет базу отпусков с реальностью."""
     if not VACATION_ROLE_ID:
-        print("[vacation_monitor] VACATION_ROLE_ID не задан в конфиге.")
+        logger.warning("VACATION_ROLE_ID не задан в конфиге.")
         return
 
     guild = find_vacation_guild()
     if guild is None:
-        print("[vacation_monitor] Гильдия с ролью отпуска не найдена.")
+        logger.warning("Гильдия с ролью отпуска не найдена.")
         return
 
     if get_vacation_role(guild) is None:
-        print(f"[vacation_monitor] Роль {VACATION_ROLE_ID} не найдена на сервере {guild.name}.")
+        logger.warning("Роль %s не найдена на сервере %s.", VACATION_ROLE_ID, guild.name)
         return
 
     try:
         rows = await vacation_db.get_all_vacations()
     except Exception as e:
-        print(f"[vacation_monitor] Ошибка чтения БД: {e}")
+        logger.error("Ошибка чтения БД отпусков: %s", e)
         return
 
     # None это недоступная БД. Продолжать нельзя: строгая синхронизация примет
     # "нет данных" за "отпусков нет" и снимет роль у всех
     if rows is None:
-        print("[vacation_monitor] База отпусков недоступна, проверка пропущена.")
+        logger.warning("База отпусков недоступна, проверка пропущена.")
         return
 
     now = now_local()
@@ -156,9 +160,9 @@ async def vacation_monitor():
     revoked = await _strict_sync(guild, active_ids) if VACATION_ROLE_STRICT_SYNC else 0
 
     if finished or started or revoked:
-        print(
-            f"[vacation_monitor] Начато: {started}, окончено: {finished}, "
-            f"снято лишних ролей: {revoked}"
+        logger.info(
+            "Проверка отпусков: начато %d, окончено %d, снято лишних ролей %d",
+            started, finished, revoked,
         )
 
 

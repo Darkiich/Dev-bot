@@ -1,3 +1,5 @@
+import logging
+
 from bot_init import bot, ss14_db
 from datetime import datetime, timezone
 from dataConfig import ROLE_ACCESS_ADMIN
@@ -5,6 +7,8 @@ from disnake.ext.commands import has_any_role
 
 import disnake
 import aiohttp
+
+logger = logging.getLogger(__name__)
 
 async def get_creation_date(uuid: str):
     url = f"https://auth.spacestation14.com/api/query/userid?userid={uuid}"
@@ -20,8 +24,10 @@ async def get_creation_date(uuid: str):
                         return f'<t:{unix}:f>'
                     return "Дата не найдена"
                 else:
+                    logger.warning("check_nick: сайт учёток ответил кодом %d", resp.status)
                     return f"Ошибка: код {resp.status}"
     except Exception as e:
+        logger.error("check_nick: не удалось получить дату создания аккаунта %s: %s", uuid, e)
         return f"Ошибка: {e}"
 
 
@@ -35,6 +41,7 @@ def time_since(dt):
 @has_any_role(*ROLE_ACCESS_ADMIN)
 @bot.command(name="check_nick")
 async def check_nick_command(ctx, nickname: str):
+    logger.info("check_nick по '%s' запросил %s (%s)", nickname, ctx.author, ctx.author.id)
     # Получаем поля данных из БД 
     data, related_accounts = await ss14_db.get_all_player_info(nickname)
 
@@ -61,7 +68,8 @@ async def check_nick_command(ctx, nickname: str):
         try:
             discord_member = await ctx.guild.fetch_member(int(discord_id))
             discord_name = discord_member.name
-        except:
+        except Exception as e:
+            logger.debug("check_nick: не удалось получить участника Discord %s: %s", discord_id, e)
             discord_name = "Неизвестно"
         discord_message = f"Привязан Discord: <@{discord_id}> ({discord_name}, ID: {discord_id})"
     else:

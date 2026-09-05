@@ -1,9 +1,13 @@
+import logging
+
 import disnake
 
 from bot_init import bot, ss14_db
 from datetime import datetime
 from disnake.ext.commands import has_any_role
 from dataConfig import ROLE_ACCESS_TOP_HEADS, SPONSOR_ROLE_ID
+
+logger = logging.getLogger(__name__)
 
 
 async def grant_sponsor_role(ctx, guid: str) -> str:
@@ -29,10 +33,13 @@ async def grant_sponsor_role(ctx, guid: str) -> str:
 
     try:
         await member.add_roles(role, reason="Выдача спонсорки через бота")
+        logger.info("Выдана роль спонсора участнику %s (%s)", member, member.id)
         return f"✅ Роль **{role.name}** выдана {member.mention}."
     except disnake.Forbidden:
+        logger.warning("Не удалось выдать роль спонсора %s: нет прав у бота", discord_id)
         return "⚠️ Роль не выдана: у бота нет прав."
     except disnake.HTTPException as e:
+        logger.error("Не удалось выдать роль спонсора %s: %s", discord_id, e)
         return f"⚠️ Роль не выдана: ошибка Discord ({e})."
 
 
@@ -71,10 +78,13 @@ async def add_sponsor_command(ctx, username: str, tier: int, date: str, donate_n
 
     if not ok:
         if info == "exists":
+            logger.info("add_sponsor: запись для %s уже существует", username)
             await ctx.send("Удалите запись о спонсоре перед добавлением новой")
         else:
+            logger.error("Не удалось добавить %s в спонсоры: %s", username, info)
             await ctx.send(f"❌ Не удалось добавить {username} в спонсоры:\n```{info}```")
         return
 
+    logger.info("Спонсор добавлен: %s, тир %d, инициатор %s (%s)", username, tier, ctx.author, ctx.author.id)
     role_status = await grant_sponsor_role(ctx, guid)
     await ctx.send(f"Пользователь {username} добавлен в спонсоры с тиром {tier}.\n{role_status}")

@@ -1,7 +1,11 @@
 import asyncpg
 import json
+import logging
 from dataConfig import DATABASE_MRP, DATABASE_DEV, DATABASE_HOST, DATABASE_PORT, DATABASE_USER, DATABASE_PASS, DATABASE_MRP_SPONSOR
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
 
 class DatabaseManagerSS14:
     """
@@ -59,7 +63,7 @@ class DatabaseManagerSS14:
             """, targets)
             result = [{'datname': r['datname'], 'size': int(r['size']), 'tables': None} for r in rows]
         except Exception as e:
-            print(f"Ошибка БД (get_databases_size): {e}")
+            logger.exception("Ошибка БД (get_databases_size): %s", e)
             return None
         finally:
             await conn.close()
@@ -73,7 +77,7 @@ class DatabaseManagerSS14:
             try:
                 entry['tables'] = await self.get_tables_size(tracked_tables, conn_name)
             except Exception as e:
-                print(f"Ошибка БД (tables {entry['datname']}): {e}")
+                logger.exception("Ошибка БД (tables %s): %s", entry['datname'], e)
                 entry['tables'] = None
         return result
 
@@ -93,7 +97,7 @@ class DatabaseManagerSS14:
             found = {r['name']: int(r['size']) for r in rows}
             return [{'name': t, 'size': found.get(t)} for t in tables]
         except Exception as e:
-            print(f"Ошибка БД (get_tables_size): {e}")
+            logger.exception("Ошибка БД (get_tables_size): %s", e)
             return None
         finally:
             await conn.close()
@@ -181,7 +185,7 @@ class DatabaseManagerSS14:
             """, username)
             return result
         except Exception as e:
-            print(f"Ошибка БД: {e}")
+            logger.exception("Ошибка БД в search_ban_player: %s", e)
             return None
         finally:
             await conn.close()
@@ -212,7 +216,7 @@ class DatabaseManagerSS14:
             """, guid)
             return result
         except Exception as e:
-            print(f"Ошибка БД: {e}")
+            logger.exception("Ошибка БД в search_ban_player_by_guid: %s", e)
             return None
         finally:
             await conn.close()
@@ -245,7 +249,7 @@ class DatabaseManagerSS14:
             """, username)
             return result
         except Exception as e:
-            print(f"Ошибка БД: {e}")
+            logger.exception("Ошибка БД в search_notes_player: %s", e)
             return None
         finally:
             await conn.close()
@@ -432,7 +436,7 @@ class DatabaseManagerSS14:
             result = await conn.fetchrow("SELECT user_id, player_name, donate_name, tier, ooccolor, have_priority_join, extra_slots, expire_date, allow_job FROM sponsors WHERE user_id = $1", guid)
             return dict(result) if result else None
         except Exception as e:
-            print(f"Ошибка БД: {e}")
+            logger.exception("Ошибка БД в get_sponsor: %s", e)
             return None
         finally:
             await conn.close()
@@ -450,7 +454,7 @@ class DatabaseManagerSS14:
             """)
             return [r['user_id'] for r in rows]
         except Exception as e:
-            print(f"Ошибка БД (get_active_sponsor_guids): {e}")
+            logger.exception("Ошибка БД (get_active_sponsor_guids): %s", e)
             return []
         finally:
             await conn.close()
@@ -470,7 +474,7 @@ class DatabaseManagerSS14:
             )
             return {str(r['user_id']): r['discord_id'] for r in rows}
         except Exception as e:
-            print(f"Ошибка БД (get_discord_ids_by_guids): {e}")
+            logger.exception("Ошибка БД (get_discord_ids_by_guids): %s", e)
             return {}
         finally:
             await conn.close()
