@@ -19,6 +19,7 @@ MODULE_GROUPS = (
     'commands.discord',
     'commands.sponsor',
     'commands.holiday',
+    'commands.moderation',
     'tasks',
     'events',
 )

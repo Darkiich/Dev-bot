@@ -9,7 +9,10 @@ from tasks.db_size_monitor import db_size_monitor
 from tasks.vacation_monitor import vacation_monitor
 from tasks.team_report import team_report
 from tasks.team_sync import team_sync
+from tasks.mod_monitor import mod_monitor
+from tasks.mod_report import mod_report
 from commands.team.team_panel_command import TeamPanel
+from commands.moderation.mod_panel_command import ModPanel
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +25,8 @@ BACKGROUND_TASKS = (
     vacation_monitor,
     team_report,
     team_sync,
+    mod_monitor,
+    mod_report,
 )
 
 _startup_done = False
@@ -38,6 +43,7 @@ async def on_ready():
 
     bot.add_view(RegisterButton())
     bot.add_view(TeamPanel())
+    bot.add_view(ModPanel())
 
     if _startup_done:
         logger.info("on_ready сработал повторно (переподключение), фоновые задачи не трогаю")
