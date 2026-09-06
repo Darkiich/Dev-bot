@@ -65,7 +65,7 @@ async def db_size_monitor():
 
         lines = [f"• {datname}: {fmt_size(d['size'])}"]
         for t in (d.get('tables') or []):
-            tsize = fmt_size(t['size']) if t['size'] is not None else "—"
+            tsize = fmt_size(t['size']) if t['size'] is not None else "-"
             lines.append(f"   └ {t['name']}: {tsize}")
         breakdown = "\n".join(lines)
 

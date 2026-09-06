@@ -20,6 +20,7 @@ MODULE_GROUPS = (
     'commands.sponsor',
     'commands.holiday',
     'commands.moderation',
+    'commands.ghost',
     'tasks',
     'events',
 )

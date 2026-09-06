@@ -445,7 +445,7 @@ async def perform_hire(member: disnake.Member, role: disnake.Role, actor, reason
     sent = await announce(build_hire_embed(member, position, actor, reason))
 
     logger.info(
-        "Найм: %s (%s) принят в «%s» на «%s» — инициатор %s (%s), причина: %r",
+        "Найм: %s (%s) принят в «%s» на «%s» - инициатор %s (%s), причина: %r",
         member, member.id, position.department_name, position.name, actor, actor.id, reason,
     )
     return result_lines(
@@ -474,7 +474,7 @@ async def perform_fire(member: disnake.Member, role: disnake.Role, actor, reason
     )
 
     logger.info(
-        "Увольнение: %s (%s) снят с «%s» — инициатор %s (%s), причина: %r",
+        "Увольнение: %s (%s) снят с «%s» - инициатор %s (%s), причина: %r",
         member, member.id, position.name, actor, actor.id, reason,
     )
     head = f"✅ {member.mention} снят с должности «{position.name}»."
@@ -510,7 +510,7 @@ async def perform_move(member: disnake.Member, role: disnake.Role, actor,
     sent = await announce(build_move_embed(member, current, position, actor, action, reason))
 
     logger.info(
-        "%s: %s (%s) «%s» -> «%s» — инициатор %s (%s), причина: %r",
+        "%s: %s (%s) «%s» -> «%s» - инициатор %s (%s), причина: %r",
         action, member, member.id, current.name, position.name, actor, actor.id, reason,
     )
     label = "повышен" if action == "promote" else "понижен"

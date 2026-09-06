@@ -60,7 +60,7 @@ async def adminwho_command(ctx):
 
                 if online_admins:
                     value = "\n".join(
-                        f"**{p.get('Name', '?')}** — {p.get('AdminTitle', 'Админ')} "
+                        f"**{p.get('Name', '?')}** - {p.get('AdminTitle', 'Админ')} "
                         f"({p.get('PingUser', '?')} ms)"
                         for p in online_admins
                     )
@@ -70,7 +70,7 @@ async def adminwho_command(ctx):
 
                 if deadminned_admins:
                     value = "\n".join(
-                        f"**{p.get('Name', '?')}** — {p.get('AdminTitle', 'Админ')} "
+                        f"**{p.get('Name', '?')}** - {p.get('AdminTitle', 'Админ')} "
                         f"({p.get('PingUser', '?')} ms)"
                         for p in deadminned_admins
                     )

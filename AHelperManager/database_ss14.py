@@ -50,7 +50,7 @@ class DatabaseManagerSS14:
         Возвращает размеры баз ss14 и ss14_dev
         Для каждой из них дополнительно считает размер таблиц admin_log и admin_log_player.
         Формат: [{'datname': str, 'size': int, 'tables': [{'name': str, 'size': int|None}]|None}].
-        При ошибке — None.
+        При ошибке - None.
         """
         conn = await self.get_connection(db_name)
         try:
@@ -84,7 +84,7 @@ class DatabaseManagerSS14:
     async def get_tables_size(self, tables: list, db_name: str = 'mrp'):
         """
         Возвращает размеры указанных таблиц (вместе с индексами) в текущей БД.
-        [{'name': str, 'size': int|None}] в порядке списка; None — таблицы нет.
+        [{'name': str, 'size': int|None}] в порядке списка; None - таблицы нет.
         """
         conn = await self.get_connection(db_name)
         try:

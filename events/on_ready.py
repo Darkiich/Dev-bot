@@ -11,6 +11,7 @@ from tasks.team_report import team_report
 from tasks.team_sync import team_sync
 from tasks.mod_monitor import mod_monitor
 from tasks.mod_report import mod_report
+from tasks.ghost_report import ghost_report
 from commands.team.team_panel_command import TeamPanel
 from commands.moderation.mod_panel_command import ModPanel
 
@@ -27,6 +28,7 @@ BACKGROUND_TASKS = (
     team_sync,
     mod_monitor,
     mod_report,
+    ghost_report,
 )
 
 _startup_done = False
