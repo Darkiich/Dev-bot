@@ -38,7 +38,15 @@ CONNECT_TIMEOUT = 15
 COMMAND_TIMEOUT = 30
 ATTEMPTS = 2
 
-ACTIONS = ("warn", "mute", "kick", "ban", "softban", "note", "unmute", "unban", "unwarn")
+ACTIONS = (
+    # Выдаёт сам бот
+    "warn", "mute", "kick", "ban", "softban", "note", "unmute", "unban", "unwarn",
+    "lock", "unlock",
+    # Сделано руками через интерфейс Discord
+    "timeout", "untimeout", "nick", "purge", "prune",
+    "voice_kick", "voice_move", "voice_mute", "voice_unmute",
+    "voice_deaf", "voice_undeaf",
+)
 
 # Почему кейс закрыт: срок вышел, сняли руками, заменили новым наказанием
 CLOSE_KINDS = ("expired", "revoked", "replaced")

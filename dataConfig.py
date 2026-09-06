@@ -283,6 +283,21 @@ MOD_PURGE_OLD_LIMIT = 25
 MOD_LOCK_MAX_MIN = 1440
 
 
+# Записывать ли в журнал модерации то, что сделано руками через интерфейс
+MOD_AUDIT_ENABLED = True
+
+# Что именно ловить
+MOD_AUDIT_ACTIONS = {
+    "ban", "unban", "kick",
+    "timeout", "untimeout",
+    "mute", "unmute",
+    "nick",
+    "purge", "prune",
+    "voice_kick", "voice_move", "voice_mute", "voice_unmute",
+    "voice_deaf", "voice_undeaf",
+}
+
+
 #  Гост-отчёты агоста и игоста
 
 # Канал с отчётами администрации
