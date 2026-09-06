@@ -27,6 +27,8 @@ jobs:
       - name: Залить файлы на VPS (rsync)
         run: |
           rsync -avz --delete \
+            --exclude='LICENSE' \
+            --exclude='README.md' \
             --exclude='.git/' \
             --exclude='.github/' \
             --exclude='venv/' \
