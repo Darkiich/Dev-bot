@@ -66,6 +66,10 @@ ROLE_ACCESS_TOP_HEADS = [
     1060264704838209586, # Куратор проекта
 ]
 
+ROLE_ACCESS_SPONSOR = ROLE_ACCESS_TOP_HEADS + [
+    1266161300036390913, # Руководство отдела разработки
+]
+
 # Функция для получения значения скрытого ключа
 def get_env(key: str):
     env = os.getenv(f"{key}")
@@ -99,6 +103,9 @@ SPONSOR_ROLE_ID = 1047486419960082474
 ADMIN_GUID = get_env("ADMIN_GUID")
 ADMIN_NAME = get_env("ADMIN_NAME")
 ADMIN_API = get_env("ADMIN_API")
+
+SPONSOR_API = get_env("SPONSOR_API")
+SPONSOR_API_URL = os.getenv("SPONSOR_API_URL") or f"http://{ADDRESS_MRP}:1212"
 
 DATABASE_MRP = get_env("DATABASE_MRP")
 DATABASE_DEV = get_env("DATABASE_DEV")
