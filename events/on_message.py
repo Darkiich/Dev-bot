@@ -139,10 +139,14 @@ async def _reject(message, advice: str, help_command: str):
 
 @bot.event
 async def on_message(message):
-    if not message.author.bot and not _is_command(message):
-        locked = _locked(message)
-        if locked is not None:
-            await _reject(message, *locked)
-            return
+    # Через этот обработчик проходят вообще все сообщения бота, поэтому
+    try:
+        if not message.author.bot and not _is_command(message):
+            locked = _locked(message)
+            if locked is not None:
+                await _reject(message, *locked)
+                return
+    except Exception:
+        logger.exception("Сторож закрытых каналов упал, пропускаю сообщение")
 
     await bot.process_commands(message)

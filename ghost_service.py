@@ -16,13 +16,13 @@ from dataConfig import (
     AGHOST_REPORT_CHANNEL_ID,
     EGHOST_REPORT_CHANNEL_ID,
     GHOST_MAX_SHIFT_HOURS,
-    GHOST_REVIEW_EVENT,
     GHOST_STATUS_SERVER,
     GHOST_STATUS_TIMEOUT,
     MOD_GUILD_ID,
     ROLE_ACCESS_GHOST_ADMIN,
     ROLE_ACCESS_GHOST_EVENT,
-    ROLE_ACCESS_GHOST_REVIEW,
+    ROLE_ACCESS_AGHOST_REVIEW,
+    ROLE_ACCESS_EGHOST_REVIEW,
 )
 from ghost_rules import (
     AGHOST,
@@ -73,19 +73,34 @@ def can_open(user, kind: str) -> bool:
     return bool(_role_ids(user) & set(allowed))
 
 
-def can_review(user) -> bool:
-    """Проверка отчётов - обязанность наблюдателей, но выше тоже могут."""
-    return bool(_role_ids(user) & set(ROLE_ACCESS_GHOST_REVIEW))
+# У каждого отдела свои проверяющие - у модерации наблюдатели и инструкторы,
+# у ивентологии - ивентер-инструктор и выше
+REVIEW_ROLES = {
+    AGHOST: ROLE_ACCESS_AGHOST_REVIEW,
+    EGHOST: ROLE_ACCESS_EGHOST_REVIEW,
+}
+
+
+def can_review(user, kind: str = None) -> bool:
+    """
+    Проверяющий по конкретному отделу
+    """
+    if kind is None:
+        allowed = set().union(*(set(roles) for roles in REVIEW_ROLES.values()))
+    else:
+        allowed = set(REVIEW_ROLES.get(kind, ()))
+
+    return bool(_role_ids(user) & allowed)
 
 
 def can_close(user, row) -> bool:
     """Закрывает смену её хозяин. Проверяющие могут закрыть чужую забытую."""
-    return user.id == row["user_id"] or can_review(user)
-
+    return user.id == row["user_id"] or can_review(user, row["kind"])
 
 
 def review_needed(kind: str) -> bool:
-    return kind == AGHOST or GHOST_REVIEW_EVENT
+    """Нужна ли отчётам отдела проверка. Нет проверяющих - нет и проверки."""
+    return bool(REVIEW_ROLES.get(kind))
 
 
 def initial_review_state(kind: str) -> str:
@@ -572,7 +587,7 @@ async def add_action(shift_id: int, actor, body: str) -> str:
     if row["ended_at"] is not None:
         return f"⚠️ Отчёт #{shift_id} уже завершён, действия к нему не добавить."
 
-    if actor.id != row["user_id"] and not can_review(actor):
+    if actor.id != row["user_id"] and not can_review(actor, row["kind"]):
         return "❌ Отмечать действия может только тот, кто ведёт смену."
 
     body = (body or "").strip()
@@ -634,8 +649,8 @@ async def review_shift(shift_id: int, state: str, actor, note: str = "") -> str:
     if row is None:
         return f"❌ Отчёт #{shift_id} не найден."
 
-    if not can_review(actor):
-        return "❌ Отчёты проверяют наблюдатели и выше."
+    if not can_review(actor, row["kind"]):
+        return "❌ Этот отчёт проверяет старший состав своего отдела."
 
     if row["ended_at"] is None:
         return "⚠️ Смена ещё идёт. Проверять можно только завершённый отчёт."

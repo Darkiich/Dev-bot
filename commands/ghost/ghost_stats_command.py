@@ -132,11 +132,11 @@ async def ghost_command(ctx, member: disnake.Member = None, days: int = 30):
     member = member or ctx.author
     days = max(1, min(days, 365))
 
-    if member.id != ctx.author.id and not can_review(ctx.author):
-        await reply(ctx, "❌ Чужие смены смотрят наблюдатели и выше.")
-        return
-
     kind, _ = resolve_kind("", member)
+
+    if member.id != ctx.author.id and not can_review(ctx.author, kind):
+        await reply(ctx, "❌ Чужие смены смотрит проверяющий состав того же отдела.")
+        return
 
     summary = await ghost_db.user_summary(
         member.id, kind, days, max_hours=GHOST_MAX_SHIFT_HOURS

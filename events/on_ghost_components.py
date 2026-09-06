@@ -40,7 +40,12 @@ REVIEW_ACTIONS = ("approve", "reject")
 def _allowed(user, kind: str | None, action: str) -> str | None:
     """Текст отказа или None, если кнопка этому человеку доступна."""
     if action in REVIEW_ACTIONS:
-        return None if can_review(user) else "Отчёты проверяют наблюдатели и выше."
+        if can_review(user, kind):
+            return None
+        return (
+            "Отчёты модерации проверяют наблюдатели и выше, "
+            "отчёты ивентологии - ивентер-инструктор и выше."
+        )
 
     # Карточка из старого формата custom_id: вида смены в ней нет, поэтому
     # пускаем любого из отделов, а хозяина смены проверит уже сам вызов
@@ -48,7 +53,7 @@ def _allowed(user, kind: str | None, action: str) -> str | None:
         staff = can_open(user, AGHOST) or can_open(user, EGHOST) or can_review(user)
         return None if staff else "Это кнопки для отделов."
 
-    if can_open(user, kind) or can_review(user):
+    if can_open(user, kind) or can_review(user, kind):
         return None
 
     return f"{kind_name(kind)} ведёт свой отдел, чужие смены не трогаем."
