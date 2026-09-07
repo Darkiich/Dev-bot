@@ -73,6 +73,7 @@ class DatabaseManagerGhost:
 
         return conn
 
+    
     async def _run(self, label: str, operation):
         """Выполняет операцию, при обрыве соединения повторяет на новом."""
         last_error = None
