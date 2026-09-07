@@ -8,6 +8,7 @@ BASE_URL = SPONSOR_API_URL.rstrip("/")
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=15)
 
 class SponsorApiError(Exception):
+    """Ошибка при обращении к спонсор-API."""
 
 class SponsorApi:
 
