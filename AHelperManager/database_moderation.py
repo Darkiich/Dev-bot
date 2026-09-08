@@ -43,8 +43,8 @@ ACTIONS = (
     "warn", "mute", "kick", "ban", "softban", "note", "unmute", "unban", "unwarn",
     "lock", "unlock",
     # Сделано руками через интерфейс Discord
-    "timeout", "untimeout", "nick", "purge", "prune",
-    "voice_kick", "voice_move", "voice_mute", "voice_unmute",
+    "timeout", "untimeout", "prune",
+    "voice_kick", "voice_move",
     "voice_deaf", "voice_undeaf",
 )
 

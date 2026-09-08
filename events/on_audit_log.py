@@ -36,7 +36,7 @@ CLOSES = {"unban": "ban", "unmute": "mute"}
 
 class _Subject:
     """
-    Цель действия, когда это не участник, а канал или сервер
+    Цель действия, когда это не участник, а сам сервер
     """
 
     __slots__ = ("id", "mention", "display_avatar", "_label")
@@ -61,21 +61,13 @@ def _member_update(entry):
     Смотрим, что именно поменялось, и выдаём столько записей, сколько
     полей тронули.
     """
-    before, after = entry.before, entry.after
+    after = entry.after
 
     if hasattr(after, "timeout"):
         if after.timeout is not None:
             yield "timeout", "", after.timeout
         else:
             yield "untimeout", "", None
-
-    if hasattr(after, "nick"):
-        was = getattr(before, "nick", None) or "без ника"
-        now = after.nick or "без ника"
-        yield "nick", f"{was} -> {now}", None
-
-    if hasattr(after, "mute"):
-        yield ("voice_mute" if after.mute else "voice_unmute"), "", None
 
     if hasattr(after, "deaf"):
         yield ("voice_deaf" if after.deaf else "voice_undeaf"), "", None
@@ -118,17 +110,6 @@ def decode(entry):
         yield "prune", f"удалено {removed}, неактивных дольше {days} дн", None
         return
 
-    if action is A.message_delete:
-        channel = getattr(extra, "channel", None)
-        count = getattr(extra, "count", "?")
-        where = getattr(channel, "mention", "канал неизвестен")
-        yield "purge", f"{count} сообщений в {where}", None
-        return
-
-    if action is A.message_bulk_delete:
-        yield "purge", f"{getattr(extra, 'count', '?')} сообщений", None
-        return
-
     if action is A.member_disconnect:
         yield "voice_kick", f"{getattr(extra, 'count', '?')} участников", None
         return
@@ -147,9 +128,6 @@ def subject(entry, action: str):
 
     if action == "prune" or target is None:
         return _Subject(entry.guild, str(entry.guild) if entry.guild else "сервер")
-
-    if action == "purge" and not isinstance(target, (disnake.Member, disnake.User)):
-        return _Subject(target, f"#{getattr(target, 'name', 'канал')}")
 
     return target
 
