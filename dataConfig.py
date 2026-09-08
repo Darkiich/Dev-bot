@@ -51,6 +51,9 @@ ROLE_ACCESS_OBSERVER_ADMIN = [
     1054827766211694593, # Админ
     1248665270051143721, # Инструктор
     1248666127949893747, # Наблюдатель
+    1395298067309133834, # Главный ивентёр
+    1409881051450445935, # Старший ивентёр
+    1420404970192240791, # Ивентёр-инструктор
 ]
 
 ROLE_ACCESS_DEPARTAMENT_OF_UNBAN_ADMIN = [
@@ -298,9 +301,8 @@ MOD_AUDIT_ACTIONS = {
     "ban", "unban", "kick",
     "timeout", "untimeout",
     "mute", "unmute",
-    "nick",
-    "purge", "prune",
-    "voice_kick", "voice_move", "voice_mute", "voice_unmute",
+    "prune",
+    "voice_kick", "voice_move",
     "voice_deaf", "voice_undeaf",
 }
 
