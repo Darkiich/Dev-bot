@@ -120,6 +120,8 @@ class DatabaseManagerGhost:
                     preset       text,
                     preset_note  text,
                     event_text   text,
+                    event_edits  integer     NOT NULL DEFAULT 0,
+                    event_edited_at timestamptz,
                     started_at   timestamptz NOT NULL,
                     ended_at     timestamptz,
                     channel_id   bigint,
@@ -153,6 +155,8 @@ class DatabaseManagerGhost:
             for statement in (
                 "ALTER TABLE ghost_shifts ADD COLUMN IF NOT EXISTS preset_note text",
                 "ALTER TABLE ghost_shifts ADD COLUMN IF NOT EXISTS event_text text",
+                "ALTER TABLE ghost_shifts ADD COLUMN IF NOT EXISTS event_edits integer NOT NULL DEFAULT 0",
+                "ALTER TABLE ghost_shifts ADD COLUMN IF NOT EXISTS event_edited_at timestamptz",
             ):
                 try:
                     await conn.execute(statement)
@@ -243,6 +247,24 @@ class DatabaseManagerGhost:
             """, shift_id, channel_id, message_id, thread_id, message_url)
 
         return await self._safe("set_message", operation)
+
+    async def set_event(self, shift_id, event_text=None):
+        """
+        Переписывает ивент смены. Пустой текст это тоже ответ: ивента не
+        будет. Возвращает строку или None, если смены нет либо её успели
+        завершить.
+        """
+        async def operation(conn):
+            return await conn.fetchrow("""
+                UPDATE ghost_shifts
+                   SET event_text = $2,
+                       event_edits = event_edits + 1,
+                       event_edited_at = $3
+                 WHERE id = $1 AND ended_at IS NULL
+             RETURNING *
+            """, shift_id, event_text, _now())
+
+        return await self._safe("set_event", operation)
 
     async def close_shift(self, shift_id, ended_at=None, review_state=None):
         """

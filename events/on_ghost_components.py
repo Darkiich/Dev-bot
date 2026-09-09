@@ -3,6 +3,7 @@
 
     ghost:<вид>:finish:<отчёт> - завершить смену, спросив время окончания
     ghost:<вид>:act:<отчёт> - оповестить о действии, только у игоста
+    ghost:<вид>:event:<отчёт> - поправить ивент, пока смена идёт
     ghost:<вид>:approve:<отчёт> - подтвердить отчёт, заметка по желанию
     ghost:<вид>:reject:<отчёт> - не подтверждать, причина обязательна
     ghost:<вид>:log:<отчёт> - хронология действий смены
@@ -28,6 +29,8 @@ from ghost_service import (
     can_open,
     can_review,
     close_shift,
+    edit_event,
+    peek_shift,
     review_shift,
 )
 from vacation_time import as_local
@@ -138,6 +141,39 @@ class ActionModal(disnake.ui.Modal):
         await inter.followup.send(text, ephemeral=True, allowed_mentions=MENTIONS)
 
 
+#  Ивент на раунд
+class EventModal(disnake.ui.Modal):
+    """
+    Ивент открытой смены. Поле необязательное: пустое - значит ивента не
+    будет, и это такой же ответ, как ссылка на него.
+    """
+
+    def __init__(self, shift_id: int, event_text: str = ""):
+        self.shift_id = shift_id
+
+        super().__init__(
+            title=f"Ивент на раунд, отчёт #{shift_id}"[:45],
+            custom_id=f"ghost_event_modal:{shift_id}",
+            components=[
+                disnake.ui.TextInput(
+                    label="Ивент на раунд",
+                    custom_id="event",
+                    style=disnake.TextInputStyle.paragraph,
+                    required=False,
+                    max_length=900,
+                    value=(event_text or "").strip()[:900] or None,
+                    placeholder="Ссылка на ивент или описание. Пусто - ивента на раунд нет",
+                )
+            ],
+        )
+
+    async def callback(self, inter: disnake.ModalInteraction):
+        await inter.response.defer(ephemeral=True)
+
+        text = await edit_event(self.shift_id, inter.author, inter.text_values.get("event", ""))
+        await inter.followup.send(text, ephemeral=True, allowed_mentions=MENTIONS)
+
+
 #  Проверка отчёта
 class ApproveModal(disnake.ui.Modal):
     """Заметка по желанию: пустая - значит подтвердили молча."""
@@ -209,6 +245,20 @@ async def _handle(inter, kind: str | None, action: str, shift_id: int):
     if action in ("finish", "act"):
         modal = FinishModal(shift_id) if action == "finish" else ActionModal(shift_id)
         await inter.response.send_modal(modal)
+        return
+
+    if action == "event":
+        row = await peek_shift(shift_id)
+
+        if row is not None and row["ended_at"] is not None:
+            await inter.response.send_message(
+                f"⚠️ Отчёт #{shift_id} уже завершён, ивент в нём не поменять.",
+                ephemeral=True,
+            )
+            return
+
+        current = row["event_text"] if row is not None else ""
+        await inter.response.send_modal(EventModal(shift_id, current or ""))
         return
 
     if action in REVIEW_ACTIONS:

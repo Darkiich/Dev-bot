@@ -2,6 +2,7 @@
 Гост-смены: сборка карточек, ветки под отчёт и вся работа с ДС
 """
 
+import asyncio
 import logging
 
 from datetime import datetime
@@ -60,6 +61,22 @@ SERVER_PORTS = {"mrp": (ADDRESS_MRP, "1212"), "dev": (ADDRESS_DEV, "11212")}
 
 # Ветка под отчёт живёт сутки без активности, потом сворачивается сама
 THREAD_ARCHIVE_MIN = 1440
+
+# Сколько ждём базу, если ответ нужен до открытия формы
+PEEK_TIMEOUT = 2
+
+
+def _value(row, key, default=None):
+    """
+    Поле строки, которого может не оказаться.
+
+    Колонки добавляются миграцией, а прав на DDL у бота может и не быть:
+    карточка из-за этого падать не должна.
+    """
+    try:
+        return row[key]
+    except (KeyError, IndexError, TypeError):
+        return default
 
 
 #  Кто что может
@@ -257,6 +274,21 @@ def _state_line(row) -> tuple[str, int]:
     return "⏹️ Смена завершена, ждёт проверки", kind_color(row["kind"])
 
 
+def event_field_name(row) -> str:
+    """
+    Заголовок поля ивента. Правку видно прямо в карточке: наблюдателю
+    важно, что ивент появился по ходу раунда, а не был заявлен сразу.
+    """
+    edits = _value(row, "event_edits") or 0
+    if not edits:
+        return "Ивент"
+
+    edited = as_local(_value(row, "event_edited_at"))
+    name = f"Ивент · изменён в {clock(edited)}" if edited else "Ивент · изменён"
+
+    return f"{name} (правок: {edits})" if edits > 1 else name
+
+
 def build_shift_embed(row, member=None) -> disnake.Embed:
     """Карточка отчёта. Одна и та же и при открытии, и после проверки."""
     kind = row["kind"]
@@ -303,7 +335,11 @@ def build_shift_embed(row, member=None) -> disnake.Embed:
 
     if kind == EGHOST:
         embed.add_field(name="Отмечено действий", value=str(row["actions"] or 0), inline=True)
-        embed.add_field(name="Ивент", value=event_line(row["event_text"]), inline=False)
+        embed.add_field(
+            name=event_field_name(row),
+            value=event_line(row["event_text"]),
+            inline=False,
+        )
 
     embed.add_field(name="Статус", value=state_text, inline=False)
 
@@ -328,8 +364,8 @@ def shift_buttons(row) -> list:
     """
     Кнопки под карточкой. Вся суть в custom_id: перезапуск бота им не страшен.
 
-    Пока смена идёт - завершить и, у игоста, отметить действие.
-    После - проверка отчёта, если она для этого вида смен нужна.
+    Пока смена идёт - завершить и, у игоста, отметить действие и поправить
+    ивент. После - проверка отчёта, если она для этого вида смен нужна.
     """
     shift_id = row["id"]
     if not shift_id:
@@ -349,6 +385,15 @@ def shift_buttons(row) -> list:
                     emoji="📢",
                     style=disnake.ButtonStyle.primary,
                     custom_id=f"{tag}:act:{shift_id}",
+                )
+            )
+
+            buttons.append(
+                disnake.ui.Button(
+                    label="Ивент",
+                    emoji="✏️",
+                    style=disnake.ButtonStyle.secondary,
+                    custom_id=f"{tag}:event:{shift_id}",
                 )
             )
 
@@ -618,6 +663,77 @@ async def add_action(shift_id: int, actor, body: str) -> str:
     logger.info("Действие в %s #%s от %s: %s", row["kind"], shift_id, actor, body[:80])
 
     return f"📢 Записал. Всего действий за смену: **{total}**."
+
+
+#  Ивент на раунд
+async def peek_shift(shift_id: int):
+    """
+    Строка смены для формы, которую нужно отдать за три секунды.
+    """
+    try:
+        return await asyncio.wait_for(ghost_db.get_shift(shift_id), timeout=PEEK_TIMEOUT)
+    except Exception as e:
+        logger.warning("Смену #%s к форме подтянуть не успел: %s", shift_id, e)
+        return None
+
+
+async def edit_event(shift_id: int, actor, text: str) -> str:
+    """
+    Меняет ивент открытой смены. Пустой текст - ивента на раунд не будет.
+    """
+    row = await ghost_db.get_shift(shift_id)
+    if row is None:
+        return f"❌ Отчёт #{shift_id} не найден."
+
+    if row["kind"] != EGHOST:
+        return "⚠️ Ивент отмечается только в игосте."
+
+    if row["ended_at"] is not None:
+        return (
+            f"⚠️ Отчёт #{shift_id} завершён в {clock(as_local(row['ended_at']))}, "
+            f"ивент в нём уже не поменять."
+        )
+
+    if actor.id != row["user_id"] and not can_review(actor, row["kind"]):
+        return "❌ Менять ивент может только тот, кто ведёт смену."
+
+    was = (row["event_text"] or "").strip()
+    became = (text or "").strip()
+
+    if was == became:
+        return "⚠️ Ивент не изменился, писать нечего."
+
+    updated = await ghost_db.set_event(shift_id, became or None)
+    if updated is None:
+        return "⚠️ База недоступна или смену успели завершить. Ивент не изменился."
+
+    await refresh_card(updated)
+
+    thread = await shift_thread(updated)
+    if thread is not None:
+        embed = disnake.Embed(
+            title="✏️ Ивент изменён",
+            color=COLOR_INFO,
+            timestamp=disnake.utils.utcnow(),
+        )
+        embed.add_field(name="Было", value=event_line(was), inline=False)
+        embed.add_field(name="Стало", value=event_line(became), inline=False)
+        embed.set_footer(text=f"Отчёт #{shift_id} · {actor}")
+        try:
+            await thread.send(embed=embed, allowed_mentions=MENTIONS)
+        except disnake.HTTPException:
+            pass
+
+    logger.info(
+        "Ивент в %s #%s изменён пользователем %s: %s",
+        updated["kind"], shift_id, actor, became[:80] or "снят",
+    )
+
+    lines = ["✨ Ивент записан." if became else "➖ Записал: ивента на раунд не будет."]
+    if updated["message_url"]:
+        lines.append(f"Карточка обновлена: {updated['message_url']}")
+
+    return "\n".join(lines)
 
 
 def build_actions_embed(row, actions) -> disnake.Embed:
