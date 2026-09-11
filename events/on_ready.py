@@ -1,5 +1,7 @@
 import logging
 
+import disnake
+
 from bot_init import bot
 from tasks.discord_auth import RegisterButton, discord_auth_update
 from tasks.team_list import list_team_task
@@ -34,6 +36,37 @@ BACKGROUND_TASKS = (
 _startup_done = False
 
 
+async def drop_application_commands():
+    """
+    Бот работает только на префикс-командах. Слэш-команды, которые остались
+    зарегистрированы в Discord с прежних версий, снимаем: сам disnake чистит
+    лишь глобальные, а серверные так и висели бы в меню «/» и падали с ошибкой.
+    Если снимать нечего, запросов на запись не будет.
+    """
+    try:
+        stale = await bot.fetch_global_commands()
+        if stale:
+            await bot.bulk_overwrite_global_commands([])
+            logger.info("Сняты глобальные слэш-команды: %d", len(stale))
+    except Exception:
+        logger.exception("Не удалось снять глобальные слэш-команды")
+
+    for guild in bot.guilds:
+        try:
+            stale = await bot.fetch_guild_commands(guild.id)
+            if stale:
+                await bot.bulk_overwrite_guild_commands(guild.id, [])
+                logger.info(
+                    "Сняты слэш-команды на сервере %s (%s): %s",
+                    guild.name, guild.id, ", ".join(f"/{cmd.name}" for cmd in stale),
+                )
+        except disnake.Forbidden:
+            # Без scope applications.commands на этом сервере команд у бота и нет
+            continue
+        except Exception:
+            logger.exception("Не удалось снять слэш-команды на сервере %s (%s)", guild.name, guild.id)
+
+
 @bot.event
 async def on_ready():
     global _startup_done
@@ -59,4 +92,6 @@ async def on_ready():
     logger.info("Запущено фоновых задач: %d (%s)", len(started), ", ".join(started))
 
     _startup_done = True
+
+    await drop_application_commands()
     logger.info("Бот полностью готов к работе: %s (%s)", bot.user, bot.user.id)

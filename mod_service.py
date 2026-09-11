@@ -2,7 +2,7 @@
 Ядро модерации Discord: проверки, действие, кейс в базе, карточка в лог-канал
 и письмо нарушителю.
 
-Команды с префиксом, слэш-команды, кнопки панели и фоновая задача зовут одни
+Команды с префиксом, кнопки панели и фоновая задача зовут одни
 и те же perform_*. Логика ровно одна, поэтому мут из панели ничем не отличается
 от мута из команды: тот же номер кейса, та же запись в истории, то же письмо.
 
@@ -1301,8 +1301,8 @@ def build_case_detail(row) -> disnake.Embed:
     return embed
 
 
-#  Разбор аргументов, общий для команд и слэш-команд
-async def find_target(ctx_or_inter, token: str):
+#  Разбор аргументов, общий для команд
+async def find_target(ctx, token: str):
     """
     Находит участника по упоминанию, ID или имени. Возвращает (кого, ошибка).
     Того, кто вышел с сервера, ищем среди пользователей Discord: банить и
@@ -1312,10 +1312,10 @@ async def find_target(ctx_or_inter, token: str):
     if not token:
         return None, "Не указан участник."
 
-    guild = getattr(ctx_or_inter, "guild", None) or moderation_guild()
+    guild = getattr(ctx, "guild", None) or moderation_guild()
 
     try:
-        member = await commands.MemberConverter().convert(ctx_or_inter, token)
+        member = await commands.MemberConverter().convert(ctx, token)
         return member, None
     except (commands.MemberNotFound, commands.CommandError, AttributeError):
         pass

@@ -58,7 +58,7 @@ def _allowed(user, action: str) -> str | None:
 
 
 async def run_action(action: str, target, actor, reason: str, duration_text: str = "") -> str:
-    """Единая точка: и кнопка, и слэш-команда зовут отсюда те же perform_*."""
+    """Единая точка для кнопок панели: зовёт те же perform_*, что и команды."""
     if action == "warn":
         return await perform_warn(target, actor, reason, source="panel")
 

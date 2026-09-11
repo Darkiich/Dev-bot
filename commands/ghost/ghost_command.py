@@ -10,11 +10,7 @@ from disnake.ext.commands import has_any_role
 
 from bot_init import bot
 from commands.moderation.mod_common import error_text, reply
-from dataConfig import (
-    MOD_SLASH_GUILD_IDS,
-    ROLE_ACCESS_GHOST_ADMIN,
-    ROLE_ACCESS_GHOST_EVENT,
-)
+from dataConfig import ROLE_ACCESS_GHOST_ADMIN, ROLE_ACCESS_GHOST_EVENT
 from ghost_rules import (
     AGHOST,
     EGHOST,
@@ -32,8 +28,6 @@ from vacation_time import now_local
 logger = logging.getLogger(__name__)
 
 PANEL_TIMEOUT = 300
-
-GUILDS = MOD_SLASH_GUILD_IDS or None
 
 EVENT_PLACEHOLDER = "Ссылка на ивент или описание. Пусто - ивента на раунд нет"
 
@@ -200,8 +194,7 @@ class OpenPanel(disnake.ui.View):
         self.author_id = author_id
         self.status = dict(status or {})
 
-        self.message = None # панель, вызванная префикс-командой
-        self.inter = None # панель, вызванная слэш-командой
+        self.message = None
 
         self.open_button.label = f"Открыть {kind_name(kind).lower()}"[:80]
 
@@ -239,9 +232,7 @@ class OpenPanel(disnake.ui.View):
         self.stop()
 
         try:
-            if self.inter is not None:
-                await self.inter.edit_original_response(content=text, embed=None, view=None)
-            elif self.message is not None:
+            if self.message is not None:
                 await self.message.edit(content=text, embed=None, view=None)
         except disnake.HTTPException:
             pass
@@ -260,25 +251,15 @@ class OpenPanel(disnake.ui.View):
         await inter.response.send_modal(OpenModal(self))
 
 
-#  Точка входа, одна на префикс- и слэш-команды
-async def send_panel(kind: str, author, ctx=None, inter=None):
+async def send_panel(ctx, kind: str):
     """Тянет статус сервера и выкладывает панель."""
-    if not can_open(author, kind):
-        text = f"❌ {kind_name(kind)} сдаёт свой отдел, тебе он не положен."
-        if inter is not None:
-            await inter.edit_original_response(content=text)
-        else:
-            await reply(ctx, text)
+    if not can_open(ctx.author, kind):
+        await reply(ctx, f"❌ {kind_name(kind)} сдаёт свой отдел, тебе он не положен.")
         return
 
     status = await fetch_status()
-    panel = OpenPanel(kind, author.id, status)
+    panel = OpenPanel(kind, ctx.author.id, status)
     embed = panel.build_embed()
-
-    if inter is not None:
-        panel.inter = inter
-        await inter.edit_original_response(embed=embed, view=panel)
-        return
 
     panel.message = await ctx.send(embed=embed, view=panel, allowed_mentions=MENTIONS)
 
@@ -287,7 +268,7 @@ async def send_panel(kind: str, author, ctx=None, inter=None):
 @has_any_role(*ROLE_ACCESS_GHOST_ADMIN)
 async def aghost_command(ctx):
     """Панель открытия агоста."""
-    await send_panel(AGHOST, ctx.author, ctx=ctx)
+    await send_panel(ctx, AGHOST)
 
 
 @aghost_command.error
@@ -301,7 +282,7 @@ async def aghost_command_error(ctx, error):
 @has_any_role(*ROLE_ACCESS_GHOST_EVENT)
 async def eghost_command(ctx):
     """Панель открытия игоста."""
-    await send_panel(EGHOST, ctx.author, ctx=ctx)
+    await send_panel(ctx, EGHOST)
 
 
 @eghost_command.error
@@ -309,24 +290,3 @@ async def eghost_command_error(ctx, error):
     text = error_text(error, "**Использование:** `&eghost`")
     if text:
         await reply(ctx, text)
-
-
-#  Слэш-команды: то же самое, но ответ виден только автору
-@bot.slash_command(
-    name="aghost",
-    description="Открыть агост и сдать отчёт",
-    guild_ids=GUILDS,
-)
-async def aghost_slash(inter: disnake.ApplicationCommandInteraction):
-    await inter.response.defer(ephemeral=True)
-    await send_panel(AGHOST, inter.author, inter=inter)
-
-
-@bot.slash_command(
-    name="eghost",
-    description="Открыть игост и сдать отчёт",
-    guild_ids=GUILDS,
-)
-async def eghost_slash(inter: disnake.ApplicationCommandInteraction):
-    await inter.response.defer(ephemeral=True)
-    await send_panel(EGHOST, inter.author, inter=inter)
