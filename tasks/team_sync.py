@@ -19,8 +19,8 @@ import disnake
 from disnake.ext import tasks
 
 from bot_init import bot, team_db
-from dataConfig import TEAM_SYNC_INTERVAL_MIN, LOG_CHANNEL_ID
-from team_service import COLOR_INFO, announce, collect_import_rows, find_team_guild
+from dataConfig import TEAM_SYNC_CHANNEL_ID, TEAM_SYNC_INTERVAL_MIN, LOG_CHANNEL_ID
+from team_service import COLOR_INFO, collect_import_rows, find_team_guild
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,28 @@ async def _load_members(guild) -> bool:
         return False
 
 
+async def _send(channel_id: int, embed: disnake.Embed, label: str) -> bool:
+    """Кладёт эмбед в канал по ID. False, если канал недоступен."""
+    if not channel_id:
+        logger.warning("%s не задан в конфиге.", label)
+        return False
+
+    channel = bot.get_channel(channel_id)
+    if channel is None:
+        try:
+            channel = await bot.fetch_channel(channel_id)
+        except (disnake.NotFound, disnake.Forbidden, disnake.HTTPException) as e:
+            logger.error("Канал %s (%s) недоступен: %s", label, channel_id, e)
+            return False
+
+    try:
+        await channel.send(embed=embed)
+        return True
+    except (disnake.Forbidden, disnake.HTTPException) as e:
+        logger.error("Не удалось написать в канал %s: %s", label, e)
+        return False
+
+
 async def _report(added: int, removed: int):
     embed = disnake.Embed(
         title="🔄 Сверка состава",
@@ -50,26 +72,9 @@ async def _report(added: int, removed: int):
     if removed:
         embed.add_field(name="Убрано должностей", value=str(removed), inline=True)
 
-    await announce(embed)
-
-    if not LOG_CHANNEL_ID:
-        logger.warning("LOG_CHANNEL_ID не задан в конфиге.")
-        return False
-
-    channel = bot.get_channel(LOG_CHANNEL_ID)
-    if channel is None:
-        try:
-            channel = await bot.fetch_channel(LOG_CHANNEL_ID)
-        except (disnake.NotFound, disnake.Forbidden, disnake.HTTPException) as e:
-            logger.error("Канал кадровых действий %s недоступен: %s", LOG_CHANNEL_ID, e)
-            return False
-
-    try:
-        await channel.send(embed=embed)
-        return True
-    except (disnake.Forbidden, disnake.HTTPException) as e:
-        logger.error("Не удалось отправить сообщение в канал кадровых действий: %s", e)
-        return False
+    # Роли мимо найма идут в свой канал, а не в общий кадровый
+    await _send(TEAM_SYNC_CHANNEL_ID, embed, "TEAM_SYNC_CHANNEL_ID")
+    return await _send(LOG_CHANNEL_ID, embed, "LOG_CHANNEL_ID")
 
 
 @tasks.loop(minutes=TEAM_SYNC_INTERVAL_MIN or 30)

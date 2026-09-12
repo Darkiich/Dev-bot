@@ -7,6 +7,7 @@
     &unmute @user Разобрались
     &muted - кто сейчас в муте
     &mute_setup - расставить права роли мута по каналам
+    &mute_check [@участник] - где мут ещё не работает и почему
 
 Срок пишется первым словом после участника: 30 (минуты), 10m, 2h, 3d, 1w
 или по-русски 10м, 2ч, 3д. Слово «перм» - мут без срока.
@@ -22,7 +23,7 @@ from disnake.ext.commands import has_any_role
 from bot_init import bot, mod_db
 from commands.moderation.mod_common import error_text, evidence_url, reply
 from dataConfig import MOD_DEFAULT_MUTE, MUTED_ROLE_ID, ROLE_ACCESS_MODERATOR, ROLE_ACCESS_MODERATOR_SENIOR
-from mod_rules import COLOR_INFO, COLOR_OK, DEFAULT_REASON, split_duration
+from mod_rules import COLOR_BAD, COLOR_INFO, COLOR_OK, DEFAULT_REASON, split_duration
 from mod_service import duration_line, muted_role, perform_mute, perform_unmute
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,151 @@ async def muted_command(ctx):
         embed.set_footer(text=f"Показаны 25 из {len(members)}")
 
     await reply(ctx, "", embed)
+
+
+#  Диагностика
+CHECK_TEXT = ("send_messages", "send_messages_in_threads",
+              "create_public_threads", "create_private_threads", "add_reactions")
+CHECK_VOICE = ("send_messages", "add_reactions", "speak")
+
+PERM_RU = {
+    "send_messages": "писать и создавать посты",
+    "send_messages_in_threads": "писать в ветках",
+    "create_public_threads": "создавать ветки",
+    "create_private_threads": "создавать личные ветки",
+    "add_reactions": "ставить реакции",
+    "speak": "говорить в голосовом",
+}
+
+SHOW_LIMIT = 15
+
+
+def _checked(channel) -> tuple:
+    """
+    Какие права смотреть в этом канале.
+
+    Категории пропускаем: их права всё равно видны в дочерних каналах,
+    иначе одна и та же дыра попадёт в отчёт дважды.
+    """
+    if isinstance(channel, disnake.CategoryChannel):
+        return ()
+    if isinstance(channel, (disnake.VoiceChannel, disnake.StageChannel)):
+        return CHECK_VOICE
+    return CHECK_TEXT
+
+
+def _reason(channel, role, member, leaking) -> str:
+    """Почему в этом канале всё ещё можно то, чего быть не должно."""
+    overwrites = channel.overwrites
+
+    if member is not None:
+        admin = next((r for r in member.roles if r.permissions.administrator), None)
+        if admin is not None:
+            return f"роль **{admin.name}** даёт админку, она обходит любые запреты"
+
+        own = overwrites.get(member)
+        if own is not None and any(getattr(own, p) is True for p in leaking):
+            return "персональный оверрайд участника в этом канале"
+
+    mine = overwrites.get(role)
+    if mine is None:
+        return "канал не настроен: у роли мута тут нет запретов"
+
+    gaps = [p for p in leaking if getattr(mine, p) is not False]
+    if gaps:
+        return "у роли мута не проставлено: " + ", ".join(PERM_RU[p] for p in gaps)
+
+    if member is not None:
+        louder = [
+            r.name for r in member.roles
+            if r != role and overwrites.get(r) is not None
+            and any(getattr(overwrites[r], p) is True for p in leaking)
+        ]
+        if louder:
+            return "разрешает роль **" + "**, **".join(louder[:3]) + "**"
+
+    return "причину не определил, посмотри права канала руками"
+
+
+@bot.command(name="mute_check", aliases=["мут_проверка", "mutecheck"])
+@has_any_role(*ROLE_ACCESS_MODERATOR)
+async def mute_check_command(ctx, member: disnake.Member = None):
+    """
+    Показывает, где мут ещё не работает.
+    """
+    role = muted_role(ctx.guild)
+    if role is None:
+        await reply(ctx, f"❌ Роль с ID `{MUTED_ROLE_ID}` не найдена на сервере.")
+        return
+
+    leaks = []
+    total = 0
+
+    for channel in ctx.guild.channels:
+        watch = _checked(channel)
+        if not watch:
+            continue
+
+        total += 1
+
+        if member is not None:
+            actual = channel.permissions_for(member)
+            leaking = [p for p in watch if getattr(actual, p)]
+        else:
+            mine = channel.overwrites.get(role)
+            leaking = [p for p in watch
+                       if mine is None or getattr(mine, p) is not False]
+
+        if leaking:
+            leaks.append((channel, leaking))
+
+    embed = disnake.Embed(
+        title="🔍 Проверка мута",
+        color=COLOR_OK if not leaks else COLOR_BAD,
+        timestamp=disnake.utils.utcnow(),
+    )
+
+    if member is not None:
+        head = f"Участник: {member.mention}"
+        if role not in member.roles:
+            head += "\n⚠️ Роли мута на нём сейчас нет, показываю текущие права."
+    else:
+        head = f"Проверяю права роли {role.mention} по каналам."
+
+    if not leaks:
+        embed.description = f"{head}\n\n✅ Дыр нет. Проверено каналов: **{total}**."
+        await reply(ctx, "", embed)
+        return
+
+    embed.description = (
+        f"{head}\n\nПроверено каналов: **{total}**, "
+        f"с дырами: **{len(leaks)}**."
+    )
+
+    for channel, leaking in leaks[:SHOW_LIMIT]:
+        can = ", ".join(PERM_RU[p] for p in leaking)
+        embed.add_field(
+            name=f"#{channel.name}",
+            value=f"может {can}\n{_reason(channel, role, member, leaking)}",
+            inline=False,
+        )
+
+    if len(leaks) > SHOW_LIMIT:
+        embed.add_field(
+            name="\u200b",
+            value=f"…и ещё {len(leaks) - SHOW_LIMIT} каналов",
+            inline=False,
+        )
+
+    embed.set_footer(text="Каналы без настройки чинит &mute_setup")
+    await reply(ctx, "", embed)
+
+
+@mute_check_command.error
+async def mute_check_command_error(ctx, error):
+    text = error_text(error, "**Использование:** `&mute_check [@участник]`")
+    if text:
+        await reply(ctx, text)
 
 
 @bot.command(name="mute_setup")

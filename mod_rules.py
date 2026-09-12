@@ -51,6 +51,9 @@ DEFAULT_REASON = "Причина не указана"
 # Дольше этого срока наказание считаем вечным, чтобы не ловить переполнение дат
 MAX_DURATION = timedelta(days=3650)
 
+# Потолок штатного тайм-аута Discord. Дольше платформа его не держит
+MAX_TIMEOUT = timedelta(days=28)
+
 
 def action_emoji(action: str) -> str:
     return ACTIONS.get(action, ("•",))[0]

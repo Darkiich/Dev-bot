@@ -23,6 +23,7 @@ from dataConfig import (
     MOD_GUILD_ID,
     MOD_IMMUNE_ROLES,
     MOD_LOG_CHANNEL_ID,
+    MOD_MUTE_TIMEOUT,
     MOD_WARN_EXPIRE_DAYS,
     MUTED_ROLE_ID,
     ROLE_ACCESS_MODERATOR,
@@ -30,6 +31,7 @@ from dataConfig import (
 )
 from mod_rules import (
     COLOR_BAD,
+    MAX_TIMEOUT,
     COLOR_INFO,
     COLOR_OK,
     DEFAULT_REASON,
@@ -603,6 +605,48 @@ async def _escalate(target, actor, step, warns: int, parent: dict) -> str:
     return f"⚠️ В мерах наказания указано неизвестное действие «{action}»."
 
 
+async def apply_timeout(member, duration, actor, reason="", case_id=None) -> str | None:
+    """
+    Вешает тайм-аут
+    """
+    if not MOD_MUTE_TIMEOUT:
+        return None
+
+    if duration is None or duration > MAX_TIMEOUT:
+        return (
+            f"Тайм-аут не выдан: Discord держит его максимум {MAX_TIMEOUT.days} дней. "
+            "Этот мут работает только на роли, права каналов должны быть настроены."
+        )
+
+    if not member.guild.me.guild_permissions.moderate_members:
+        return "⚠️ У бота нет права 'Модерировать участников', тайм-аут не выдан."
+
+    try:
+        await member.timeout(
+            duration=duration,
+            reason=audit_reason(actor, "mute", reason, case_id),
+        )
+    except (disnake.Forbidden, disnake.HTTPException) as e:
+        logger.warning("Не удалось выдать тайм-аут %s: %s", member, e)
+        return f"⚠️ Тайм-аут выдать не вышло: {e}"
+
+    return None
+
+
+async def clear_timeout(member, actor, reason="") -> str | None:
+    """Снимает тайм-аут, если он висит. Молчит, если его и не было."""
+    if member is None or member.current_timeout is None:
+        return None
+
+    try:
+        await member.timeout(duration=None, reason=audit_reason(actor, "unmute", reason))
+    except (disnake.Forbidden, disnake.HTTPException) as e:
+        logger.warning("Не удалось снять тайм-аут с %s: %s", member, e)
+        return f"⚠️ Тайм-аут снять не вышло: {e}"
+
+    return None
+
+
 async def perform_mute(target, actor, duration=None, reason="", source="command",
                        parent_id=None, message_url=None) -> str:
     """Выдаёт роль мута. duration=None - мут без срока."""
@@ -648,6 +692,10 @@ async def perform_mute(target, actor, duration=None, reason="", source="command"
         logger.error("Не удалось выдать роль мута %s: %s", target, e)
         return f"❌ Discord не дал выдать роль мута: {e}"
 
+    note = await apply_timeout(target, duration, actor, case["reason"], case.get("id"))
+    if note:
+        notes.append(note)
+
     announced = await announce_case(case)
 
     logger.info(
@@ -675,7 +723,8 @@ async def perform_unmute(target, actor, reason="") -> str:
     role = muted_role(guild)
     active = await mod_db.active_case(target.id, "mute", guild.id)
 
-    if role not in target.roles and not active:
+    # Тайм-аут мог остаться без роли
+    if role not in target.roles and not active and target.current_timeout is None:
         return f"ℹ️ {target.mention} и так не в муте."
 
     notes = []
@@ -684,6 +733,10 @@ async def perform_unmute(target, actor, reason="") -> str:
             await target.remove_roles(role, reason=audit_reason(actor, "unmute", reason))
         except (disnake.Forbidden, disnake.HTTPException) as e:
             return f"❌ Discord не дал снять роль мута: {e}"
+
+    note = await clear_timeout(target, actor, reason)
+    if note:
+        notes.append(note)
 
     if active:
         closed = await mod_db.close_case(
@@ -1051,6 +1104,9 @@ async def expire_case(row) -> bool:
             except (disnake.Forbidden, disnake.HTTPException) as e:
                 logger.warning("Не удалось снять роль мута с %s: %s", row["target_id"], e)
                 return False
+
+        # Тайм-аут обычно истекает сам, но мут мог оказаться длиннее
+        await clear_timeout(member, guild.me, "Срок мута истёк")
 
     elif action == "ban":
         try:
