@@ -21,6 +21,7 @@ MODULE_GROUPS = (
     'commands.holiday',
     'commands.moderation',
     'commands.ghost',
+    'commands.player',
     'tasks',
     'events',
 )

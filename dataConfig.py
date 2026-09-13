@@ -397,3 +397,20 @@ ROLE_ACCESS_GHOST_REVIEW = sorted(
 # Роли отделов для подсчёта молчунов
 GHOST_ADMIN_TEAM_ROLE_ID = 1248667383334178902 # Администрация
 GHOST_EVENT_TEAM_ROLE_ID = 1395296010573582437 # Ивентология
+
+
+#  Игроцкая статистика
+# С какой игровой базы берём часы, раунды и персонажей
+PLAYER_STATS_SERVER = "mrp"
+
+# Сколько строк показывать в рейтингах
+PLAYER_TOP_LIMIT = 10
+
+# Снимок часов: во сколько по МСК, кого снимаем и сколько дней храним.
+# История часов начинается с первого снимка, раньше динамики не будет
+PLAYER_SNAPSHOT_HOUR = 4
+PLAYER_SNAPSHOT_ACTIVE_DAYS = 60
+PLAYER_SNAPSHOT_KEEP_DAYS = 120
+
+# Показывать ли чужих персонажей по упоминанию и UID. Поиск по имени персонажа
+PLAYER_CHARACTERS_BY_DISCORD = True

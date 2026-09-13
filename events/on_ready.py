@@ -14,6 +14,7 @@ from tasks.team_sync import team_sync
 from tasks.mod_monitor import mod_monitor
 from tasks.mod_report import mod_report
 from tasks.ghost_report import ghost_report
+from tasks.playtime_snapshot import playtime_snapshot
 from commands.team.team_panel_command import TeamPanel
 from commands.moderation.mod_panel_command import ModPanel
 
@@ -31,6 +32,7 @@ BACKGROUND_TASKS = (
     mod_monitor,
     mod_report,
     ghost_report,
+    playtime_snapshot,
 )
 
 _startup_done = False
@@ -38,10 +40,8 @@ _startup_done = False
 
 async def drop_application_commands():
     """
-    Бот работает только на префикс-командах. Слэш-команды, которые остались
-    зарегистрированы в Discord с прежних версий, снимаем: сам disnake чистит
-    лишь глобальные, а серверные так и висели бы в меню «/» и падали с ошибкой.
-    Если снимать нечего, запросов на запись не будет.
+    Снимает слэш-команды, оставшиеся в Discord с прежних версий: disnake сам
+    чистит только глобальные, серверные висели бы в меню «/».
     """
     try:
         stale = await bot.fetch_global_commands()
@@ -61,8 +61,7 @@ async def drop_application_commands():
                     guild.name, guild.id, ", ".join(f"/{cmd.name}" for cmd in stale),
                 )
         except disnake.Forbidden:
-            # Без scope applications.commands на этом сервере команд у бота и нет
-            continue
+            continue # нет scope applications.commands, значит нет и команд
         except Exception:
             logger.exception("Не удалось снять слэш-команды на сервере %s (%s)", guild.name, guild.id)
 

@@ -7,6 +7,8 @@ from AHelperManager.database_vacation import DatabaseManagerVacation
 from AHelperManager.database_team import DatabaseManagerTeam
 from AHelperManager.database_moderation import DatabaseManagerModeration
 from AHelperManager.database_ghost import DatabaseManagerGhost
+from AHelperManager.database_stats import DatabaseManagerStats
+from AHelperManager.database_player import DatabaseManagerPlayer
 
 logger = logging.getLogger(__name__)
 
@@ -29,4 +31,8 @@ vacation_db = DatabaseManagerVacation()
 team_db = DatabaseManagerTeam()
 mod_db = DatabaseManagerModeration()
 ghost_db = DatabaseManagerGhost()
-logger.info("Менеджеры БД инициализированы: ss14_db, vacation_db, team_db, mod_db, ghost_db")
+stats_db = DatabaseManagerStats()
+player_db = DatabaseManagerPlayer()
+logger.info(
+    "Менеджеры БД инициализированы: ss14_db, vacation_db, team_db, mod_db, ghost_db, stats_db, player_db"
+)
