@@ -1,5 +1,5 @@
 """
-База бота для игроцких команд: снимки наигранных часов
+База бота для игроцких команд: снимки часов и приватность персонажей
 """
 
 import asyncio
@@ -107,7 +107,44 @@ class DatabaseManagerPlayer:
             ON playtime_snapshots (user_id, taken_on DESC)
         """)
 
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS player_privacy (
+                user_id          uuid PRIMARY KEY,
+                hide_characters  boolean NOT NULL DEFAULT false,
+                updated_at       timestamptz NOT NULL DEFAULT now()
+            )
+        """)
+
         logger.info("Таблицы игроцкой статистики готовы")
+
+    #  Приватность
+    async def hide_characters(self, user_id, hidden: bool) -> bool:
+        async def operation(conn):
+            await conn.execute("""
+                INSERT INTO player_privacy (user_id, hide_characters)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id)
+                DO UPDATE SET hide_characters = EXCLUDED.hide_characters, updated_at = now()
+            """, user_id, hidden)
+            return True
+
+        return await self._safe("hide_characters", operation, False)
+
+    async def characters_hidden(self, user_id) -> bool:
+        async def operation(conn):
+            return await conn.fetchval(
+                "SELECT hide_characters FROM player_privacy WHERE user_id = $1", user_id
+            )
+
+        return bool(await self._safe("characters_hidden", operation, False))
+
+    async def hidden_owners(self) -> set:
+        """UID всех, кто закрыл своих персонажей."""
+        async def operation(conn):
+            rows = await conn.fetch("SELECT user_id FROM player_privacy WHERE hide_characters")
+            return {row["user_id"] for row in rows}
+
+        return await self._safe("hidden_owners", operation, set()) or set()
 
     #  Снимки часов
     async def save_snapshot(self, taken_on, rows: list) -> int:

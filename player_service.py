@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 import disnake
 
 from bot_init import ss14_db, stats_db
-from dataConfig import CHANNEL_AUTH_DISCORD, PLAYER_STATS_SERVER
+from dataConfig import CHANNEL_AUTH_DISCORD, PLAYER_STATS_SERVER, ROLE_ACCESS_PRIVACY_BYPASS
 from player_jobs import OVERALL, is_job, job_name
 from vacation_time import TZ, plural
 
@@ -113,6 +113,12 @@ def since_text(first_seen) -> str:
     if not isinstance(first_seen, datetime):
         return "неизвестно"
     return f"{ts(first_seen, 'D')} · {age_text(first_seen)}"
+
+
+def can_see_private(user) -> bool:
+    """Админский состав видит персонажей даже у скрывшихся."""
+    roles = {role.id for role in getattr(user, "roles", [])}
+    return bool(roles & set(ROLE_ACCESS_PRIVACY_BYPASS))
 
 
 def place_text(place: int, total: int) -> str:

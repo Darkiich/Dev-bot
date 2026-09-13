@@ -414,3 +414,8 @@ PLAYER_SNAPSHOT_KEEP_DAYS = 120
 
 # Показывать ли чужих персонажей по упоминанию и UID. Поиск по имени персонажа
 PLAYER_CHARACTERS_BY_DISCORD = True
+
+# Кто видит персонажей даже у тех, кто их скрыл: игровая администрация и вышка
+ROLE_ACCESS_PRIVACY_BYPASS = sorted(
+    set(ROLE_ACCESS_ADMIN) | set(ROLE_ACCESS_DOWN_ADMIN) | set(ROLE_ACCESS_TOP_HEADS)
+)

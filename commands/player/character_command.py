@@ -6,7 +6,7 @@ import logging
 
 import disnake
 
-from bot_init import bot, stats_db
+from bot_init import bot, player_db, stats_db
 from commands.moderation.mod_common import reply
 from commands.player.character_card import build_card, name_of
 from commands.player.player_common import fail
@@ -15,6 +15,7 @@ from player_jobs import species_name
 from player_service import (
     COLOR_MAIN,
     MENTIONS,
+    can_see_private,
     discord_id_from,
     guid_by_discord,
     link_hint,
@@ -78,15 +79,24 @@ class CharacterPanel(disnake.ui.View):
                 pass
 
 
+async def _hidden_from(ctx, own_guid, guid) -> bool:
+    """Чужой ли это закрытый аккаунт. Свои и админские запросы проходят всегда."""
+    if own_guid is not None and str(own_guid) == str(guid):
+        return False
+    if can_see_private(ctx.author):
+        return False
+    return await player_db.characters_hidden(guid)
+
+
 async def _resolve(ctx, query: str):
     """Чьих персонажей показывать: (строки, подпись владельца, ошибка)."""
     query = (query or "").strip()
+    own_guid = await guid_by_discord(ctx.author.id)
 
     if not query:
-        guid = await guid_by_discord(ctx.author.id)
-        if not guid:
+        if not own_guid:
             return None, None, link_hint()
-        rows = await stats_db.characters_of(guid, PLAYER_STATS_SERVER)
+        rows = await stats_db.characters_of(own_guid, PLAYER_STATS_SERVER)
         return rows, "ты", None
 
     discord_id = discord_id_from(query)
@@ -97,12 +107,17 @@ async def _resolve(ctx, query: str):
         guid = await guid_by_discord(discord_id)
         if not guid:
             return None, None, f"❌ У <@{discord_id}> не привязан игровой аккаунт."
+        if await _hidden_from(ctx, own_guid, guid):
+            return None, None, "❌ Этот игрок скрыл своих персонажей."
+
         rows = await stats_db.characters_of(guid, PLAYER_STATS_SERVER)
         return rows, f"<@{discord_id}>", None
 
     if looks_like_uuid(query):
         if not PLAYER_CHARACTERS_BY_DISCORD:
             return None, None, "❌ Смотреть чужих персонажей по UID на сервере запрещено."
+        if await _hidden_from(ctx, own_guid, query):
+            return None, None, "❌ Этот игрок скрыл своих персонажей."
 
         rows = await stats_db.characters_of(query, PLAYER_STATS_SERVER)
         return rows, f"UID `{query}`", None
@@ -111,6 +126,14 @@ async def _resolve(ctx, query: str):
         return None, None, "❌ Для поиска нужно хотя бы три буквы имени."
 
     rows = await stats_db.characters_by_name(query, PLAYER_STATS_SERVER)
+    hidden = set() if can_see_private(ctx.author) else await player_db.hidden_owners()
+    if hidden:
+        rows = [
+            row for row in rows
+            if row["owner_user_id"] not in hidden
+            or (own_guid is not None and str(row["owner_user_id"]) == str(own_guid))
+        ]
+
     return rows, None, None
 
 

@@ -506,8 +506,9 @@ class DatabaseManagerStats(DatabaseManagerSS14):
             columns = ", ".join(f"p.{c}" for c in self._profile_columns(info))
 
             rows = await conn.fetch(f"""
-                SELECT {columns}
+                SELECT {columns}, pr.user_id AS owner_user_id
                 FROM profile p
+                JOIN preference pr ON pr.preference_id = p.preference_id
                 WHERE p.char_name ILIKE $1
                 ORDER BY p.char_name
                 LIMIT 25
