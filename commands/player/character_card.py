@@ -57,6 +57,23 @@ def _color(row, fields: set) -> int:
         return COLOR_MAIN
 
 
+def _voice(row, fields: set) -> str:
+    """Голос TTS и барк персонажа."""
+    parts = []
+
+    voice = _value(row, fields, "voice")
+    if voice:
+        parts.append(f"TTS: **{pretty_id(str(voice))}**")
+
+    bark = _value(row, fields, "bark_proto")
+    if bark:
+        pitch = _value(row, fields, "bark_pitch")
+        tone = f" (тон {float(pitch):.2f})" if pitch else ""
+        parts.append(f"Барк: **{pretty_id(str(bark))}**{tone}")
+
+    return " · ".join(parts)
+
+
 def _appearance(row, fields: set) -> str:
     """Цвета и причёска. Строка собирается из того, что нашлось."""
     parts = []
@@ -147,6 +164,10 @@ async def build_card(row, owner: str | None) -> disnake.Embed:
     gender = str(_value(row, fields, "gender") or "").strip().lower()
     if gender and gender != str(_value(row, fields, "sex") or "").strip().lower():
         embed.add_field(name="Обращение", value=GENDERS.get(gender, gender), inline=True)
+
+    voice = _voice(row, fields)
+    if voice:
+        embed.add_field(name="Голос", value=voice, inline=False)
 
     appearance = _appearance(row, fields)
     if appearance:

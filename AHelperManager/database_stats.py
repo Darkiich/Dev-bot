@@ -483,6 +483,7 @@ class DatabaseManagerStats(DatabaseManagerSS14):
             "profile_id", "char_name", "species", "age", "sex", "gender", "flavor_text", "slot",
             "hair_name", "hair_color", "facial_hair_name", "facial_hair_color",
             "eye_color", "skin_color", "height", "width",
+            "voice", "bark_proto", "bark_pitch",
         )
         return [c for c in wanted if c in info["profile"]]
 
