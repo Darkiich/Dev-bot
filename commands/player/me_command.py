@@ -4,6 +4,8 @@
 
 import logging
 
+from datetime import datetime, timezone
+
 import disnake
 
 from bot_init import bot, ss14_db
@@ -12,6 +14,7 @@ from commands.player.player_common import fail, require_account
 from dataConfig import PLAYER_STATS_SERVER
 from player_service import (
     COLOR_MAIN,
+    as_utc,
     MENTIONS,
     fmt_hours,
     since_text,
@@ -53,10 +56,18 @@ async def me_command(ctx):
 
     try:
         sponsor = await ss14_db.get_sponsor(guid)
-        if sponsor:
-            embed.add_field(name="Спонсор", value=f"уровень {sponsor['tier']}", inline=True)
     except Exception as e:
         logger.warning("Не удалось прочитать спонсорку для %s: %s", ckey, e)
+        sponsor = None
+
+    # Истёкшие подписки из базы не удаляются, поэтому смотрим на дату окончания
+    if sponsor:
+        expires = as_utc(sponsor["expire_date"])
+        if expires is None or expires > datetime.now(timezone.utc):
+            value = f"уровень {sponsor['tier']}"
+            if expires:
+                value += f" · до {ts(expires, 'd')}"
+            embed.add_field(name="Спонсор", value=value, inline=True)
 
     embed.set_footer(text=f"Сервер {PLAYER_STATS_SERVER.upper()}")
 
