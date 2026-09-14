@@ -12,6 +12,7 @@ import time
 from datetime import timedelta
 
 from AHelperManager.database_ss14 import DatabaseManagerSS14
+from dataConfig import PLAYER_TOP_MAX_YEARS, PLAYER_TOP_SKIP_GRANTED
 from player_jobs import OVERALL
 
 logger = logging.getLogger(__name__)
@@ -298,15 +299,28 @@ class DatabaseManagerStats(DatabaseManagerSS14):
 
             key = "user_id" if info["pt_player_uuid"] else "player_id"
 
+            args = [tracker, limit]
+            cap = ""
+            if PLAYER_TOP_MAX_YEARS:
+                args.append(int(PLAYER_TOP_MAX_YEARS))
+                cap = f"AND pt.{info['pt_time']} <= ${len(args)}::int * interval '1 year'"
+
+            granted = ""
+            if PLAYER_TOP_SKIP_GRANTED:
+                column = f"pt.{info['pt_time']}"
+                granted = f"AND date_trunc('minute', {column}) <> {column}"
+
             rows = await conn.fetch(f"""
                 SELECT COALESCE(pl.last_seen_user_name, 'Неизвестно') AS ckey,
                        pt.{info['pt_time']} AS time_spent
                 FROM play_time pt
                 JOIN player pl ON pl.{key} = pt.{info['pt_player']}
                 WHERE pt.{info['pt_tracker']} = $1
+                  {cap}
+                  {granted}
                 ORDER BY pt.{info['pt_time']} DESC
                 LIMIT $2
-            """, tracker, limit)
+            """, *args)
 
             return [
                 {"ckey": row["ckey"], "time": to_timedelta(row["time_spent"])}
