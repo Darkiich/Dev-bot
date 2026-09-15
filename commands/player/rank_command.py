@@ -10,7 +10,7 @@ from bot_init import bot, stats_db
 from commands.moderation.mod_common import reply
 from commands.player.player_common import fail, require_account
 from dataConfig import PLAYER_STATS_SERVER
-from player_jobs import OVERALL, job_name
+from player_jobs import OVERALL
 from player_service import COLOR_MAIN, MENTIONS, fmt_hours, place_text, played_roles, summary_of
 
 logger = logging.getLogger(__name__)
@@ -32,8 +32,9 @@ async def rank_command(ctx):
             await reply(ctx, "❌ Этого игрока нет в игровой базе.")
             return
 
-        top_roles = [tracker for tracker, _ in played_roles(data["times"])[:ROLES_SHOWN]]
-        places = await stats_db.rank_by_tracker(guid, [OVERALL] + top_roles, PLAYER_STATS_SERVER)
+        top_roles = played_roles(data["times"])[:ROLES_SHOWN]
+        groups = [[OVERALL]] + [trackers for _, _, trackers in top_roles]
+        places = await stats_db.rank_by_trackers(guid, groups, PLAYER_STATS_SERVER)
         month = await stats_db.rank_by_rounds(guid, MONTH_DAYS, PLAYER_STATS_SERVER)
         overall_rounds = await stats_db.rank_by_rounds(guid, None, PLAYER_STATS_SERVER)
     except Exception as e:
@@ -42,7 +43,7 @@ async def rank_command(ctx):
 
     embed = disnake.Embed(title=f"📍 Места · {ckey}", color=COLOR_MAIN)
 
-    overall = places.get(OVERALL)
+    overall = places[0] if places else None
     if overall:
         place, total, time_spent = overall
         embed.add_field(
@@ -68,12 +69,12 @@ async def rank_command(ctx):
         )
 
     role_lines = []
-    for tracker in top_roles:
-        found = places.get(tracker)
+    for index, (name, _, _) in enumerate(top_roles, start=1):
+        found = places[index] if index < len(places) else None
         if not found:
             continue
         place, total, time_spent = found
-        role_lines.append(f"**{job_name(tracker)}** - {place_text(place, total)} · {fmt_hours(time_spent)}")
+        role_lines.append(f"**{name}** - {place_text(place, total)} · {fmt_hours(time_spent)}")
 
     if role_lines:
         embed.add_field(name="Любимые роли", value="\n".join(role_lines), inline=False)

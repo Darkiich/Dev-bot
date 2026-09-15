@@ -139,16 +139,31 @@ def bar(values: list) -> str:
 
 #  Роли
 def played_roles(times: dict) -> list:
-    """Роли с наигранным временем, от большего к меньшему."""
-    roles = [(tracker, delta) for tracker, delta in (times or {}).items() if is_job(tracker) and delta]
-    return sorted(roles, key=lambda pair: pair[1], reverse=True)
+    """
+    Роли с наигранным временем: (название, время, трекеры), от большего.
+
+    Одна роль может лежать в базе под несколькими трекерами сразу, поэтому
+    собираем их по названию и складываем время.
+    """
+    grouped = {}
+
+    for tracker, delta in (times or {}).items():
+        if not is_job(tracker) or not delta:
+            continue
+
+        name = job_name(tracker)
+        total, trackers = grouped.get(name, (timedelta(), []))
+        grouped[name] = (total + delta, trackers + [tracker])
+
+    roles = [(name, total, trackers) for name, (total, trackers) in grouped.items()]
+    return sorted(roles, key=lambda role: role[1], reverse=True)
 
 
 def top_roles_text(times: dict, limit: int = 3) -> str:
     roles = played_roles(times)[:limit]
     if not roles:
         return "ещё не играл"
-    return "\n".join(f"**{job_name(tracker)}** - {fmt_hours(delta)}" for tracker, delta in roles)
+    return "\n".join(f"**{name}** - {fmt_hours(delta)}" for name, delta, _ in roles)
 
 
 #  Стрик

@@ -41,7 +41,7 @@ async def top_command(ctx, *, query: str = ""):
 
     try:
         if query in HOURS_WORDS:
-            rows = await stats_db.top_by_tracker(OVERALL, PLAYER_TOP_LIMIT, PLAYER_STATS_SERVER)
+            rows = await stats_db.top_by_trackers([OVERALL], PLAYER_TOP_LIMIT, PLAYER_STATS_SERVER)
             embed = disnake.Embed(
                 title="🏆 Топ по времени в игре",
                 description=_lines(rows, "time", fmt_hours),
@@ -84,16 +84,22 @@ async def top_command(ctx, *, query: str = ""):
             )
             return
 
-        if len(matches) > 1:
-            names = ", ".join(f"`{job_name(t)}`" for t in matches[:10])
+        # Одна и та же роль лежит в базе под несколькими трекерами, поэтому
+        # уточнения просим только когда названия действительно разные
+        groups = {}
+        for tracker in matches:
+            groups.setdefault(job_name(tracker), []).append(tracker)
+
+        if len(groups) > 1:
+            names = ", ".join(f"`{name}`" for name in list(groups)[:10])
             await reply(ctx, f"Уточни роль. Подходят: {names}")
             return
 
-        tracker = matches[0]
-        rows = await stats_db.top_by_tracker(tracker, PLAYER_TOP_LIMIT, PLAYER_STATS_SERVER)
+        name, group = next(iter(groups.items()))
+        rows = await stats_db.top_by_trackers(group, PLAYER_TOP_LIMIT, PLAYER_STATS_SERVER)
 
         embed = disnake.Embed(
-            title=f"🏆 Топ по роли: {job_name(tracker)}",
+            title=f"🏆 Топ по роли: {name}",
             description=_lines(rows, "time", fmt_hours),
             color=COLOR_MAIN,
         )

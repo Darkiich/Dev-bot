@@ -291,34 +291,38 @@ class DatabaseManagerStats(DatabaseManagerSS14):
             await conn.close()
 
     #  Рейтинги
-    async def top_by_tracker(self, tracker: str, limit: int = 10, db_name: str = "mrp") -> list:
-        """Топ игроков по времени в конкретном трекере."""
+    async def top_by_trackers(self, trackers: list, limit: int = 10, db_name: str = "mrp") -> list:
+        """Топ игроков по времени. Несколько трекеров считаются как одна роль."""
         conn = await self.get_connection(db_name)
         try:
             info = await self.schema(conn, db_name)
 
             key = "user_id" if info["pt_player_uuid"] else "player_id"
 
-            args = [tracker, limit]
+            args = [list(trackers), limit]
             cap = ""
             if PLAYER_TOP_MAX_YEARS:
                 args.append(int(PLAYER_TOP_MAX_YEARS))
-                cap = f"AND pt.{info['pt_time']} <= ${len(args)}::int * interval '1 year'"
+                cap = f"AND totals.time_spent <= ${len(args)}::int * interval '1 year'"
 
             granted = ""
             if PLAYER_TOP_SKIP_GRANTED:
-                column = f"pt.{info['pt_time']}"
-                granted = f"AND date_trunc('minute', {column}) <> {column}"
+                granted = "AND date_trunc('minute', totals.time_spent) <> totals.time_spent"
 
             rows = await conn.fetch(f"""
-                SELECT COALESCE(pl.last_seen_user_name, 'Неизвестно') AS ckey,
-                       pt.{info['pt_time']} AS time_spent
-                FROM play_time pt
-                JOIN player pl ON pl.{key} = pt.{info['pt_player']}
-                WHERE pt.{info['pt_tracker']} = $1
+                WITH totals AS (
+                    SELECT {info['pt_player']} AS player, SUM({info['pt_time']}) AS time_spent
+                    FROM play_time
+                    WHERE {info['pt_tracker']} = ANY($1::text[])
+                    GROUP BY 1
+                )
+                SELECT COALESCE(pl.last_seen_user_name, 'Неизвестно') AS ckey, totals.time_spent
+                FROM totals
+                JOIN player pl ON pl.{key} = totals.player
+                WHERE TRUE
                   {cap}
                   {granted}
-                ORDER BY pt.{info['pt_time']} DESC
+                ORDER BY totals.time_spent DESC
                 LIMIT $2
             """, *args)
 
@@ -361,37 +365,40 @@ class DatabaseManagerStats(DatabaseManagerSS14):
         finally:
             await conn.close()
 
-    async def rank_by_tracker(self, guid, trackers: list, db_name: str = "mrp") -> dict:
-        """Места игрока в рейтингах по времени: {трекер: (место, всего, время)}."""
+    async def rank_by_trackers(self, guid, groups: list, db_name: str = "mrp") -> list:
+        """Места игрока по каждой группе трекеров: (место, всего, время) или None."""
         conn = await self.get_connection(db_name)
         try:
             info = await self.schema(conn, db_name)
 
             player = await conn.fetchrow("SELECT player_id, user_id FROM player WHERE user_id = $1", guid)
             if player is None:
-                return {}
+                return [None] * len(groups)
 
             key = self._player_key(info, player, "pt_player_uuid")
-            places = {}
+            places = []
 
-            for tracker in trackers:
-                mine = await conn.fetchval(f"""
-                    SELECT {info['pt_time']} FROM play_time
-                    WHERE {info['pt_player']} = $1 AND {info['pt_tracker']} = $2
-                """, key, tracker)
-                if mine is None:
+            for trackers in groups:
+                row = await conn.fetchrow(f"""
+                    WITH totals AS (
+                        SELECT {info['pt_player']} AS player, SUM({info['pt_time']}) AS time_spent
+                        FROM play_time
+                        WHERE {info['pt_tracker']} = ANY($1::text[])
+                        GROUP BY 1
+                    ), mine AS (
+                        SELECT time_spent FROM totals WHERE player = $2
+                    )
+                    SELECT
+                        (SELECT time_spent FROM mine) AS time_spent,
+                        (SELECT COUNT(*) FROM totals WHERE time_spent > (SELECT time_spent FROM mine)) AS better,
+                        (SELECT COUNT(*) FROM totals) AS total
+                """, list(trackers), key)
+
+                if row is None or row["time_spent"] is None:
+                    places.append(None)
                     continue
 
-                better = await conn.fetchval(f"""
-                    SELECT COUNT(*) FROM play_time
-                    WHERE {info['pt_tracker']} = $1 AND {info['pt_time']} > $2
-                """, tracker, mine)
-
-                total = await conn.fetchval(f"""
-                    SELECT COUNT(*) FROM play_time WHERE {info['pt_tracker']} = $1
-                """, tracker)
-
-                places[tracker] = (int(better) + 1, int(total), to_timedelta(mine))
+                places.append((int(row["better"]) + 1, int(row["total"]), to_timedelta(row["time_spent"])))
 
             return places
         finally:

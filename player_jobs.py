@@ -144,7 +144,7 @@ TRAITS = {
     "deafness": "Глухота",
 }
 
-_CAMEL = re.compile(r"(?<!^)(?=[A-Z])")
+_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 
 def pretty_id(value: str) -> str:

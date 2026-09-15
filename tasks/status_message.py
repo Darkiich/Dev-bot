@@ -9,6 +9,8 @@ from template_embed import embed_status
 import aiohttp
 from disnake.ext import tasks
 
+from report_board import refresh_board
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,14 +54,4 @@ async def status_update():
         logger.error("Не удалось получить статус сервера: %s", e)
         embed = Embed(title="Ошибка", description=str(e), color=0xff0000)
 
-    pinned = []
-    async for msg in channel.pins():
-        pinned.append(msg)
-
-    old_message = next((m for m in pinned if m.author == channel.guild.me), None)
-
-    if old_message:
-        await old_message.edit(embed=embed)
-    else:
-        new_message = await channel.send(embed=embed)
-        await new_message.pin()
+    await refresh_board(channel, [embed], label="статус сервера")

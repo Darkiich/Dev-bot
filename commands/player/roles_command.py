@@ -9,7 +9,7 @@ import disnake
 from bot_init import bot
 from commands.moderation.mod_common import reply
 from commands.player.player_common import fail, require_account
-from player_jobs import DEPARTMENTS, job_department, job_name
+from player_jobs import DEPARTMENTS, job_department
 from player_service import COLOR_MAIN, MENTIONS, fmt_hours, played_roles, summary_of
 
 logger = logging.getLogger(__name__)
@@ -20,9 +20,9 @@ FIELD_LIMIT = 1024
 def _department_lines(roles: list) -> dict:
     """Роли по отделам: {отдел: [строки]}."""
     grouped = {}
-    for tracker, delta in roles:
-        grouped.setdefault(job_department(tracker), []).append(
-            f"**{job_name(tracker)}** - {fmt_hours(delta)}"
+    for name, delta, trackers in roles:
+        grouped.setdefault(job_department(trackers[0]), []).append(
+            f"**{name}** - {fmt_hours(delta)}"
         )
     return grouped
 

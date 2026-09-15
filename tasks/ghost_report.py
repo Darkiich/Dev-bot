@@ -34,6 +34,7 @@ from ghost_rules import (
     kind_verb,
 )
 from ghost_service import review_needed
+from report_board import refresh_board
 from vacation_time import as_local, now_local, plural, ts
 
 logger = logging.getLogger(__name__)
@@ -326,20 +327,14 @@ async def collect(kind: str, guild):
     )
 
 
-async def _find_report_message(channel, kind: str):
-    """Свой закреплённый отчёт по этому виду смен или None."""
+def _is_report(kind: str):
+    """Отчёт этого отдела узнаём по заголовку первого эмбеда."""
     head = kind_title(kind)
 
-    try:
-        async for message in channel.pins():
-            if message.author.id != bot.user.id or not message.embeds:
-                continue
-            if (message.embeds[0].title or "").startswith(head):
-                return message
-    except (disnake.Forbidden, disnake.HTTPException) as e:
-        logger.error("Не удалось прочитать закреплённые сообщения: %s", e)
+    def match(message) -> bool:
+        return bool(message.embeds) and (message.embeds[0].title or "").startswith(head)
 
-    return None
+    return match
 
 
 async def _publish(kind: str) -> str | None:
@@ -364,17 +359,14 @@ async def _publish(kind: str) -> str | None:
         return None
 
     embeds = build_report(kind, data, guild)
-    message = await _find_report_message(channel, kind)
 
-    try:
-        if message:
-            await message.edit(embeds=embeds, allowed_mentions=SILENT)
-        else:
-            message = await channel.send(embeds=embeds, allowed_mentions=SILENT)
-            await message.pin()
-            logger.info("Отчёт %s создан и закреплён в %s", kind, channel_id)
-    except (disnake.Forbidden, disnake.HTTPException) as e:
-        logger.error("Не удалось обновить отчёт %s: %s", kind, e)
+    message = await refresh_board(
+        channel, embeds,
+        match=_is_report(kind),
+        label=f"отчёт {kind_name(kind)}",
+        mentions=SILENT,
+    )
+    if message is None:
         return None
 
     return f"{kind_name(kind)}: {channel.mention}"

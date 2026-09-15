@@ -19,6 +19,7 @@ from dataConfig import (
     VACATION_TIMEZONE,
 )
 from mod_rules import COLOR_INFO, action_title
+from report_board import refresh_board
 from vacation_time import now_local, plural
 
 logger = logging.getLogger(__name__)
@@ -237,17 +238,6 @@ def build_report(data: dict, guild) -> list:
     return [_summary(data), _activity(data), _moderators(data, guild), _offenders(data)]
 
 
-async def _find_report_message(channel):
-    """Свой закреплённый отчёт в канале или None."""
-    try:
-        async for message in channel.pins():
-            if message.author.id == bot.user.id:
-                return message
-    except (disnake.Forbidden, disnake.HTTPException) as e:
-        logger.error("Не удалось прочитать закреплённые сообщения: %s", e)
-    return None
-
-
 async def refresh_report() -> str:
     """Перерисовывает отчёт. Возвращает текст для того, кто позвал вручную."""
     if not MOD_REPORT_CHANNEL_ID:
@@ -276,19 +266,10 @@ async def refresh_report() -> str:
         return "⚠️ База не ответила, отчёт оставлен как был."
 
     embeds = build_report(data, guild)
-    message = await _find_report_message(channel)
 
-    try:
-        if message:
-            await message.edit(embeds=embeds, allowed_mentions=SILENT)
-            logger.debug("Отчёт модерации обновлён")
-        else:
-            message = await channel.send(embeds=embeds, allowed_mentions=SILENT)
-            await message.pin()
-            logger.info("Отчёт модерации создан и закреплён")
-    except (disnake.Forbidden, disnake.HTTPException) as e:
-        logger.error("Не удалось обновить отчёт модерации: %s", e)
-        return f"❌ Не удалось обновить отчёт: {e}"
+    message = await refresh_board(channel, embeds, label="отчёт модерации", mentions=SILENT)
+    if message is None:
+        return "❌ Не удалось обновить отчёт, подробности в логе."
 
     return f"📊 Отчёт обновлён: {channel.mention}"
 

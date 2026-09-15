@@ -10,7 +10,6 @@ from bot_init import bot, stats_db
 from commands.moderation.mod_common import error_text, reply
 from commands.player.player_common import fail, require_account
 from dataConfig import PLAYER_STATS_SERVER
-from player_jobs import job_name
 from player_service import (
     COLOR_MAIN,
     MENTIONS,
@@ -44,8 +43,8 @@ def _favourite(data: dict) -> str:
     roles = played_roles(data["times"])
     if not roles:
         return "нет"
-    tracker, delta = roles[0]
-    return f"{job_name(tracker)} ({fmt_hours(delta)})"
+    name, delta, _ = roles[0]
+    return f"{name} ({fmt_hours(delta)})"
 
 
 @bot.command(name="vs", aliases=["сравнить", "против"])

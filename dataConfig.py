@@ -311,8 +311,7 @@ MOD_AUDIT_ACTIONS = {
     "timeout", "untimeout",
     "mute", "unmute",
     "prune",
-    "voice_kick", "voice_move",
-    "voice_deaf", "voice_undeaf",
+    "voice_kick",
 }
 
 

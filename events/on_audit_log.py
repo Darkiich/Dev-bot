@@ -69,9 +69,6 @@ def _member_update(entry):
         else:
             yield "untimeout", "", None
 
-    if hasattr(after, "deaf"):
-        yield ("voice_deaf" if after.deaf else "voice_undeaf"), "", None
-
 
 def _role_update(entry):
     """Из ролей смотрим только роль мута, остальные к модерации не относятся."""
@@ -112,12 +109,6 @@ def decode(entry):
 
     if action is A.member_disconnect:
         yield "voice_kick", f"{getattr(extra, 'count', '?')} участников", None
-        return
-
-    if action is A.member_move:
-        channel = getattr(extra, "channel", None)
-        where = getattr(channel, "mention", "канал неизвестен")
-        yield "voice_move", f"{getattr(extra, 'count', '?')} участников в {where}", None
 
 
 def subject(entry, action: str):

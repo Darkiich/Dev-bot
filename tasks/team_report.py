@@ -19,6 +19,7 @@ from disnake.ext import tasks
 
 from bot_init import bot, team_db
 from dataConfig import TEAM_REPORT_CHANNEL_ID, TEAM_REPORT_INTERVAL_MIN
+from report_board import refresh_board
 from team_departments import DEPARTMENTS, department_name, get_ladder
 from team_service import COLOR_INFO
 
@@ -201,17 +202,6 @@ def build_report(data: dict) -> list:
     ]
 
 
-async def _find_report_message(channel):
-    """Свой закреплённый отчёт в канале или None."""
-    try:
-        async for message in channel.pins():
-            if message.author.id == bot.user.id:
-                return message
-    except (disnake.Forbidden, disnake.HTTPException) as e:
-        logger.error("Не удалось прочитать закреплённые сообщения: %s", e)
-    return None
-
-
 @tasks.loop(minutes=TEAM_REPORT_INTERVAL_MIN or 120)
 async def team_report():
     if not TEAM_REPORT_CHANNEL_ID:
@@ -231,18 +221,8 @@ async def team_report():
         return
 
     embeds = build_report(data)
-    message = await _find_report_message(channel)
 
-    try:
-        if message:
-            await message.edit(embeds=embeds)
-            logger.debug("Отчёт кадров обновлён")
-        else:
-            message = await channel.send(embeds=embeds)
-            await message.pin()
-            logger.info("Отчёт кадров создан и закреплён")
-    except (disnake.Forbidden, disnake.HTTPException) as e:
-        logger.error("Не удалось обновить отчёт кадров: %s", e)
+    await refresh_board(channel, embeds, label="отчёт кадров")
 
 
 @team_report.before_loop
