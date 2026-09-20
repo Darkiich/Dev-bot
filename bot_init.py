@@ -4,7 +4,6 @@ from disnake import Intents
 from disnake.ext.commands import Bot
 from AHelperManager.database_ss14 import DatabaseManagerSS14
 from AHelperManager.database_vacation import DatabaseManagerVacation
-from AHelperManager.database_team import DatabaseManagerTeam
 from AHelperManager.database_moderation import DatabaseManagerModeration
 from AHelperManager.database_ghost import DatabaseManagerGhost
 from AHelperManager.database_stats import DatabaseManagerStats
@@ -28,11 +27,10 @@ logger.info("Экземпляр бота создан (prefix='&')")
 
 ss14_db = DatabaseManagerSS14()
 vacation_db = DatabaseManagerVacation()
-team_db = DatabaseManagerTeam()
 mod_db = DatabaseManagerModeration()
 ghost_db = DatabaseManagerGhost()
 stats_db = DatabaseManagerStats()
 player_db = DatabaseManagerPlayer()
 logger.info(
-    "Менеджеры БД инициализированы: ss14_db, vacation_db, team_db, mod_db, ghost_db, stats_db, player_db"
+    "Менеджеры БД инициализированы: ss14_db, vacation_db, mod_db, ghost_db, stats_db, player_db"
 )

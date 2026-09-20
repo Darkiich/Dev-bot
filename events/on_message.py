@@ -3,11 +3,7 @@ import logging
 import disnake
 
 from bot_init import bot
-from dataConfig import (
-    AGHOST_REPORT_CHANNEL_ID,
-    EGHOST_REPORT_CHANNEL_ID,
-    TEAM_LOG_CHANNEL_ID,
-)
+from dataConfig import AGHOST_REPORT_CHANNEL_ID, EGHOST_REPORT_CHANNEL_ID
 from ghost_rules import AGHOST, EGHOST, kind_name
 from ghost_service import channel_id_for, departments_of
 
@@ -20,11 +16,6 @@ DM_WARNING = (
 )
 
 FALLBACK_WARNING = "{mention}, здесь только команды бота. {advice}"
-
-TEAM_ADVICE = (
-    "Кадровые действия оформляются командами: `&hire`, `&fire`, `&promote`, "
-    "`&demote`, либо кнопками на панели."
-)
 
 GHOST_CHANNELS = {
     AGHOST_REPORT_CHANNEL_ID: AGHOST,
@@ -77,12 +68,7 @@ def _ghost_advice(author, kind: str) -> str:
 
 def _locked(message) -> tuple[str, str] | None:
     """(объяснение, файл справки) для закрытого канала или None, если открыт."""
-    channel_id = message.channel.id
-
-    if TEAM_LOG_CHANNEL_ID and channel_id == TEAM_LOG_CHANNEL_ID:
-        return TEAM_ADVICE, "&team_help"
-
-    kind = GHOST_CHANNELS.get(channel_id)
+    kind = GHOST_CHANNELS.get(message.channel.id)
     if kind:
         return _ghost_advice(message.author, kind), "&ghost_help"
 

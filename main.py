@@ -15,7 +15,7 @@ MODULE_GROUPS = (
     'commands.admin',
     'commands.github',
     'commands.misc',
-    'commands.team',
+    'commands.vacation',
     'commands.discord',
     'commands.sponsor',
     'commands.holiday',

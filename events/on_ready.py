@@ -9,13 +9,10 @@ from tasks.status_message import status_update
 from tasks.sponsor_role_sync import sponsor_role_sync
 from tasks.db_size_monitor import db_size_monitor
 from tasks.vacation_monitor import vacation_monitor
-from tasks.team_report import team_report
-from tasks.team_sync import team_sync
 from tasks.mod_monitor import mod_monitor
 from tasks.mod_report import mod_report
 from tasks.ghost_report import ghost_report
 from tasks.playtime_snapshot import playtime_snapshot
-from commands.team.team_panel_command import TeamPanel
 from commands.moderation.mod_panel_command import ModPanel
 
 logger = logging.getLogger(__name__)
@@ -27,8 +24,6 @@ BACKGROUND_TASKS = (
     sponsor_role_sync,
     db_size_monitor,
     vacation_monitor,
-    team_report,
-    team_sync,
     mod_monitor,
     mod_report,
     ghost_report,
@@ -76,7 +71,6 @@ async def on_ready():
     )
 
     bot.add_view(RegisterButton())
-    bot.add_view(TeamPanel())
     bot.add_view(ModPanel())
 
     if _startup_done:
