@@ -85,13 +85,13 @@ def _summary(kind: str, data: dict) -> disnake.Embed:
 
     if not shifts:
         embed.description = (
-            f"За {LONG_DAYS} дней ни одной закрытой смены. "
-            f"Похоже, отдел не {kind_verb(kind)}."
+            f"За {LONG_DAYS} дней ни одной зачтённой смены: либо отдел не "
+            f"{kind_verb(kind)}, либо отчёты не подтверждены."
         )
         return embed
 
     embed.description = (
-        f"За **{LONG_DAYS}** дней: **{shifts}** "
+        f"За **{LONG_DAYS}** дней зачтено: **{shifts}** "
         f"{plural(shifts, ('смена', 'смены', 'смен'))}, "
         f"**{hours_text(total_hours)}** суммарно, "
         f"**{people}** {plural(people, ('человек', 'человека', 'человек'))} в строю."
@@ -114,6 +114,26 @@ def _summary(kind: str, data: dict) -> disnake.Embed:
         inline=True,
     )
 
+    # Время, которое в выработку не пошло - ждёт наблюдателя или отклонено
+    not_counted = data.get("not_counted") or {}
+    waiting_hours = float(not_counted.get("pending_hours") or 0)
+    lost_hours = float(not_counted.get("rejected_hours") or 0)
+
+    if review_needed(kind) and (waiting_hours or lost_hours):
+        waiting_shifts = not_counted.get("pending_shifts") or 0
+        lost_shifts = not_counted.get("rejected_shifts") or 0
+
+        embed.add_field(
+            name="Часы вне зачёта",
+            value=(
+                f"🕓 ждут проверки - **{hours_text(waiting_hours)}** · "
+                f"{waiting_shifts} {plural(waiting_shifts, ('смена', 'смены', 'смен'))}\n"
+                f"🚫 не подтверждены - **{hours_text(lost_hours)}** · "
+                f"{lost_shifts} {plural(lost_shifts, ('смена', 'смены', 'смен'))}"
+            ),
+            inline=False,
+        )
+
     return embed
 
 
@@ -128,7 +148,7 @@ def _hours(kind: str, data: dict) -> disnake.Embed:
     )
 
     if not long_rows:
-        embed.description = f"За {LONG_DAYS} дней закрытых смен не было."
+        embed.description = f"За {LONG_DAYS} дней подтверждённых отчётов не было."
         return embed
 
     lines = []
@@ -145,7 +165,12 @@ def _hours(kind: str, data: dict) -> disnake.Embed:
         )
 
     embed.description = "\n".join(lines)[:4000]
-    embed.set_footer(text=f"Слева месяц ({LONG_DAYS} дней), внутри неделя ({SHORT_DAYS} дней)")
+    embed.set_footer(
+        text=(
+            f"Слева месяц ({LONG_DAYS} дней), внутри неделя ({SHORT_DAYS} дней) · "
+            f"только подтверждённые отчёты"
+        )
+    )
 
     return embed
 
@@ -187,6 +212,8 @@ def _review(kind: str, data: dict) -> disnake.Embed:
         value=f"**{pending}** · {_percent(pending, total)} от всех",
         inline=True,
     )
+
+    embed.set_footer(text="Часы начисляются только за подтверждённые отчёты")
 
     return embed
 

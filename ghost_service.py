@@ -124,6 +124,43 @@ def initial_review_state(kind: str) -> str:
     return REVIEW_PENDING if review_needed(kind) else REVIEW_NONE
 
 
+#  Зачёт часов
+def counted_hours(row) -> float | None:
+    """Сколько часов смена даёт статистике. None - не даёт ничего."""
+    started, ended = row["started_at"], row["ended_at"]
+    if started is None or ended is None:
+        return None
+
+    state = row["review_state"] or REVIEW_PENDING
+    if state not in (REVIEW_APPROVED, REVIEW_NONE):
+        return None
+
+    total = (ended - started).total_seconds()
+    if total <= 0 or total > GHOST_MAX_SHIFT_HOURS * 3600:
+        return None
+
+    return total / 3600
+
+
+def credit_line(row) -> str | None:
+    if row["ended_at"] is None:
+        return None
+
+    state = row["review_state"] or REVIEW_PENDING
+
+    if state == REVIEW_REJECTED:
+        return "🚫 Часы не зачтены: отчёт не подтверждён"
+
+    if state == REVIEW_PENDING:
+        return "🕓 Часы зачтутся после подтверждения"
+
+    hours = counted_hours(row)
+    if hours is None:
+        return f"🚫 Часы не зачтены: смена длиннее {GHOST_MAX_SHIFT_HOURS} ч"
+
+    return f"⏱️ Зачтено {hours_text(hours)}"
+
+
 def _department_role_ids(kind: str) -> set:
     """
     Все роли отдела: и общая, и каждая ступень лестницы.
@@ -341,7 +378,12 @@ def build_shift_embed(row, member=None) -> disnake.Embed:
             inline=False,
         )
 
-    embed.add_field(name="Статус", value=state_text, inline=False)
+    credit = credit_line(row)
+    embed.add_field(
+        name="Статус",
+        value=f"{state_text}\n{credit}" if credit else state_text,
+        inline=False,
+    )
 
     if row["review_state"] in (REVIEW_APPROVED, REVIEW_REJECTED):
         note = (row["review_note"] or "").strip()
@@ -612,7 +654,10 @@ async def close_shift(shift_id: int, actor, ended_at: datetime = None) -> str:
     ]
 
     if closed["review_state"] == REVIEW_PENDING:
-        lines.append("Отчёт ушёл наблюдателям на проверку.")
+        lines.append(
+            "Отчёт ушёл наблюдателям на проверку. "
+            "Часы зачтутся, когда его подтвердят."
+        )
 
     if (ended - started).total_seconds() > GHOST_MAX_SHIFT_HOURS * 3600:
         lines.append(
@@ -785,12 +830,16 @@ async def review_shift(shift_id: int, state: str, actor, note: str = "") -> str:
 
     await refresh_card(updated)
 
+    credit = credit_line(updated)
+
     thread = await shift_thread(updated)
     if thread is not None:
         text = f"{review_mark(state)} - {actor.mention}"
         if (note or "").strip():
             label = "Заметка" if state == REVIEW_APPROVED else "Причина"
             text += f"\n**{label}:** {note.strip()[:1500]}"
+        if credit:
+            text += f"\n{credit}"
         try:
             await thread.send(text, allowed_mentions=MENTIONS)
         except disnake.HTTPException:
@@ -801,10 +850,18 @@ async def review_shift(shift_id: int, state: str, actor, note: str = "") -> str:
         shift_id, state, actor, actor.id,
     )
 
-    head = "✅ Отчёт подтверждён." if state == REVIEW_APPROVED else "❌ Отчёт не подтверждён."
-    tail = f"\nЧеловеку видно в карточке: {updated['message_url']}" if updated["message_url"] else ""
+    lines = ["✅ Отчёт подтверждён." if state == REVIEW_APPROVED else "❌ Отчёт не подтверждён."]
 
-    return head + tail
+    if credit:
+        lines.append(credit)
+
+    if state == REVIEW_REJECTED:
+        lines.append("Переделать его нельзя: если смена была, человек откроет новый отчёт.")
+
+    if updated["message_url"]:
+        lines.append(f"Человеку видно в карточке: {updated['message_url']}")
+
+    return "\n".join(lines)
 
 
 #  Сводка для человека
@@ -824,11 +881,14 @@ def build_user_embed(member, kind, summary, days: int) -> disnake.Embed:
         embed.description = f"За {days} дней ни одной смены. Пора {kind_verb(kind)}."
         return embed
 
+    hours = float(summary["hours"] or 0)
+    counted = _value(summary, "counted_shifts") or 0
+
     embed.add_field(name="Смен", value=str(shifts), inline=True)
-    embed.add_field(name="Часов", value=hours_text(summary["hours"] or 0), inline=True)
+    embed.add_field(name="Часов зачтено", value=hours_text(hours), inline=True)
     embed.add_field(
         name="Средняя смена",
-        value=hours_text((summary["hours"] or 0) / shifts),
+        value=hours_text(hours / counted) if counted else "-",
         inline=True,
     )
 
@@ -837,11 +897,27 @@ def build_user_embed(member, kind, summary, days: int) -> disnake.Embed:
         embed.add_field(name="❌ Отклонено", value=str(summary["rejected"] or 0), inline=True)
         embed.add_field(name="🕓 Ждёт проверки", value=str(summary["pending"] or 0), inline=True)
 
+        # Время, которое зачёт не прошло
+        waiting = float(_value(summary, "hours_pending") or 0)
+        lost = float(_value(summary, "hours_rejected") or 0)
+
+        if waiting or lost:
+            embed.add_field(
+                name="Вне зачёта",
+                value=(
+                    f"🕓 ждут подтверждения - {hours_text(waiting)}\n"
+                    f"🚫 не подтверждены - {hours_text(lost)}"
+                ),
+                inline=False,
+            )
+
     last = as_local(summary["last_at"])
     if last is not None:
         embed.add_field(name="Последняя смена", value=ts(last, "R"), inline=False)
 
     embed.set_thumbnail(url=member.display_avatar.url)
-    embed.set_footer(text=f"За последние {days} дней")
+    embed.set_footer(
+        text=f"За последние {days} дней · в часы идут только подтверждённые отчёты"
+    )
 
     return embed

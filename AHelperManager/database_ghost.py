@@ -35,11 +35,28 @@ KINDS = ("aghost", "eghost")
 
 REVIEW_STATES = ("pending", "approved", "rejected", "none")
 
+# Часы даёт только подтверждённый отчёт
+COUNTED_STATES = ("approved", "none")
+
+_COUNTED_SQL = ", ".join(f"'{state}'" for state in COUNTED_STATES)
+
 logger = logging.getLogger(__name__)
 
 
 def _now():
     return datetime.now(timezone.utc)
+
+
+def _sane(hours_param: str) -> str:
+    return f"""
+        ended_at IS NOT NULL
+        AND ended_at > started_at
+        AND ended_at - started_at <= ({hours_param} || ' hours')::interval
+    """
+
+
+def _counted(hours_param: str) -> str:
+    return f"(({_sane(hours_param)}) AND review_state IN ({_COUNTED_SQL}))"
 
 
 class DatabaseManagerGhost:
@@ -368,23 +385,26 @@ class DatabaseManagerGhost:
         """
         Всё для аналитики одним походом в базу.
 
-        Считаем только закрытые смены: у открытой длительности ещё нет, а
-        подставлять «сейчас минус начало» значит записать человеку часы,
-        которых он не отработал.
+        В часы и в среднюю длительность идут только подтверждённые отчёты.
+        Закрытая смена сама по себе часов не даёт: их начисляет наблюдатель
+        кнопкой «Подтвердить». Отказ оставляет смену в истории, но без
+        часов - за неверный отчёт время не платят.
 
-        Смены длиннее max_hours в часы и в среднюю длительность не идут:
-        это забытая кнопка «завершить», а не сутки за компьютером. Само
-        число таких смен возвращается отдельно - это тоже показатель.
+        Смены длиннее max_hours не идут никуда: это забытая кнопка
+        «завершить», а не сутки за компьютером. Само число таких смен
+        возвращается отдельно - это тоже показатель.
+
+        Часы, которые в зачёт не пошли, лежат в not_counted: отделу надо
+        видеть, сколько времени висит непроверенным.
 
         None означает, что база не ответила: отчёт тогда лучше не трогать,
         чем перерисовать нулями.
         """
-        # Закрытая смена вменяемой длины, вся арифметика опирается на это
-        sane = """
-            ended_at IS NOT NULL
-            AND ended_at > started_at
-            AND ended_at - started_at <= ($3 || ' hours')::interval
-        """
+        # Закрытая смена вменяемой длины: основа для «вне зачёта»
+        sane = _sane("$3")
+
+        # То же плюс подтверждение наблюдателя: только это идёт в часы
+        counted = _counted("$3")
 
         async def operation(conn):
             data = {}
@@ -400,7 +420,7 @@ class DatabaseManagerGhost:
                      WHERE kind = $1
                        AND started_at > now() - ($2 || ' days')::interval
                        AND ($4::bigint IS NULL OR guild_id = $4)
-                       AND {sane}
+                       AND {counted}
                   GROUP BY user_id
                   ORDER BY hours DESC
                      LIMIT 25
@@ -423,6 +443,23 @@ class DatabaseManagerGhost:
                 SELECT count(*) AS shifts,
                        avg(extract(epoch FROM ended_at - started_at)) / 3600.0 AS avg_hours,
                        max(extract(epoch FROM ended_at - started_at)) / 3600.0 AS max_hours
+                  FROM ghost_shifts
+                 WHERE kind = $1
+                   AND started_at > now() - ($2 || ' days')::interval
+                   AND ($4::bigint IS NULL OR guild_id = $4)
+                   AND {counted}
+            """, kind, str(long_days), str(max_hours), guild_id)
+
+            # Часы, которые в зачёт не пошли
+            data["not_counted"] = await conn.fetchrow(f"""
+                SELECT count(*) FILTER (WHERE review_state = 'pending')  AS pending_shifts,
+                       count(*) FILTER (WHERE review_state = 'rejected') AS rejected_shifts,
+                       coalesce(sum(extract(epoch FROM ended_at - started_at))
+                                FILTER (WHERE review_state = 'pending'), 0)
+                           / 3600.0 AS pending_hours,
+                       coalesce(sum(extract(epoch FROM ended_at - started_at))
+                                FILTER (WHERE review_state = 'rejected'), 0)
+                           / 3600.0 AS rejected_hours
                   FROM ghost_shifts
                  WHERE kind = $1
                    AND started_at > now() - ($2 || ' days')::interval
@@ -484,19 +521,27 @@ class DatabaseManagerGhost:
         return await self._safe("get_report_data", operation)
 
     async def user_summary(self, user_id, kind=None, days=30, max_hours=12):
-        """Короткая сводка по человеку: смены, часы, проверка."""
+        sane = _sane("$4")
+        counted = _counted("$4")
+
         async def operation(conn):
-            return await conn.fetchrow("""
+            return await conn.fetchrow(f"""
                 SELECT count(*) AS shifts,
+                       count(*) FILTER (WHERE {counted})                 AS counted_shifts,
                        count(*) FILTER (WHERE review_state = 'approved') AS approved,
                        count(*) FILTER (WHERE review_state = 'rejected') AS rejected,
                        count(*) FILTER (WHERE review_state = 'pending'
                                           AND ended_at IS NOT NULL)      AS pending,
                        coalesce(sum(extract(epoch FROM ended_at - started_at))
-                                FILTER (WHERE ended_at IS NOT NULL
-                                          AND ended_at > started_at
-                                          AND ended_at - started_at
-                                              <= ($4 || ' hours')::interval), 0) / 3600.0 AS hours,
+                                FILTER (WHERE {counted}), 0) / 3600.0 AS hours,
+                       coalesce(sum(extract(epoch FROM ended_at - started_at))
+                                FILTER (WHERE ({sane})
+                                          AND review_state = 'pending'), 0)
+                           / 3600.0 AS hours_pending,
+                       coalesce(sum(extract(epoch FROM ended_at - started_at))
+                                FILTER (WHERE ({sane})
+                                          AND review_state = 'rejected'), 0)
+                           / 3600.0 AS hours_rejected,
                        max(started_at) AS last_at
                   FROM ghost_shifts
                  WHERE user_id = $1
