@@ -91,9 +91,6 @@ ADDRESS_DEV = "193.164.18.155"
 POST_PASSWORD_MRP = get_env("POST_PASSWORD_MRP")
 POST_PASSWORD_DEV = get_env("POST_PASSWORD_DEV")
 
-POST_AUTHORIZATION_MRP = get_env("POST_AUTHORIZATION_MRP")
-POST_AUTHORIZATION_DEV = get_env("POST_AUTHORIZATION_DEV")
-
 POST_USER_AGENT = get_env("POST_USER_AGENT")
 
 CHANNEL_AUTH_DISCORD = 1351213738774237184
@@ -182,34 +179,21 @@ TEAM_DB_SSL = os.getenv("TEAM_DB_SSL", "prefer")
 
 VALENTINE_IMAGE_PATH = "src/valentine_card/image_valentine.png"
 
-DATA_MRP = {
-    "Username": "MRP",
-    "Password": POST_PASSWORD_MRP
-}
-
-HEADERS_MRP = {
-    "Authorization": POST_AUTHORIZATION_MRP,
-    "Content-Length": str(len(DATA_MRP)),
-    "Host": f"{ADDRESS_MRP}:5000",
-    "User-Agent": POST_USER_AGENT,
-    "Accept": "application/json",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive"
-}
-
-DATA_DEV = {
-    "Username": "DEV",
-    "Password": POST_PASSWORD_DEV
-}
-
-HEADERS_DEV = {
-    "Authorization": POST_AUTHORIZATION_DEV,
-    "Content-Length": str(len(DATA_DEV)),
-    "Host": f"{ADDRESS_DEV}:5001",
-    "User-Agent": POST_USER_AGENT,
-    "Accept": "application/json",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive"
+WATCHDOG_SERVERS = {
+    "mrp": {
+        "instance": "MRP",
+        "address": ADDRESS_MRP,
+        "port": 5000,
+        "password": POST_PASSWORD_MRP,
+        "env": "POST_PASSWORD_MRP",
+    },
+    "dev": {
+        "instance": "DEV",
+        "address": ADDRESS_DEV,
+        "port": 5001,
+        "password": POST_PASSWORD_DEV,
+        "env": "POST_PASSWORD_DEV",
+    },
 }
 
 DATA_ADMIN = {
