@@ -6,6 +6,19 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+CONNECT_TIMEOUT = 10
+COMMAND_TIMEOUT = 15
+
+SS14_SESSION_SETTINGS = {
+    "application_name": "dev-bot",
+    # отмена запроса дольше 15 секунд
+    "statement_timeout": "15s",
+    # ждёт не больше 7 секунд, если таблицу использует кто-то другой
+    "lock_timeout": "7s",
+    # открытая транзакция закроется сама
+    "idle_in_transaction_session_timeout": "15s",
+}
+
 
 class DatabaseManagerSS14:
     """
@@ -43,7 +56,13 @@ class DatabaseManagerSS14:
 
         params = self.db_params[db_name]
         dsn = f"postgres://{params['user']}:{params['password']}@{params['host']}:{params['port']}/{params['database']}"
-        return await asyncpg.connect(dsn)
+
+        return await asyncpg.connect(
+            dsn,
+            timeout=CONNECT_TIMEOUT,
+            command_timeout=COMMAND_TIMEOUT,
+            server_settings=SS14_SESSION_SETTINGS,
+        )
 
     async def get_databases_size(self, db_name: str = 'mrp'):
         """
