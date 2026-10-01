@@ -287,19 +287,43 @@ def case_label(case: dict) -> str:
     return f"#{case['id']}" if case.get("id") else "без номера"
 
 
-def duration_line(expires_at) -> str:
+def term_length(expires_at, issued_at=None) -> str | None:
+    """
+    Длина срока словами
+    """
     if expires_at is None:
-        return "**Навсегда**"
+        return None
 
-    left = expires_at - disnake.utils.utcnow()
-    if left.total_seconds() <= 0:
-        return "истекло"
+    seconds = (expires_at - (issued_at or disnake.utils.utcnow())).total_seconds()
+    if seconds <= 0:
+        return None
 
     # Округляем до минуты: иначе выданный только что мут на два часа
     # показывается как «1 час», потому что пара секунд уже прошла
-    rounded = timedelta(seconds=round(left.total_seconds() / 60) * 60) or left
+    rounded = round(seconds / 60) * 60 or seconds
 
-    return f"{human_delta(rounded)}, до {ts(expires_at, 'f')} ({ts(expires_at, 'R')})"
+    return human_delta(timedelta(seconds=rounded))
+
+
+def duration_line(expires_at, issued_at=None) -> str:
+    """
+    Срок для карточки
+    """
+    if expires_at is None:
+        return "**Навсегда**"
+
+    length = term_length(expires_at, issued_at)
+    if length is None:
+        return f"истекло {ts(expires_at, 'R')}"
+
+    return f"**{length}**, до {ts(expires_at, 'f')} ({ts(expires_at, 'R')})"
+
+
+def has_term(case) -> bool:
+    """
+    Показывать ли срок в карточке
+    """
+    return case["action"] in ("mute", "ban", "warn") or bool(case.get("expires_at"))
 
 
 def build_case_embed(case: dict, warns: int = None) -> disnake.Embed:
@@ -321,7 +345,7 @@ def build_case_embed(case: dict, warns: int = None) -> disnake.Embed:
         inline=True,
     )
 
-    if action in ("mute", "ban", "warn"):
+    if has_term(case):
         embed.add_field(name="Срок", value=duration_line(case.get("expires_at")), inline=True)
 
     embed.add_field(name="Причина", value=case["reason"][:1000], inline=False)
@@ -484,7 +508,7 @@ def build_dm_embed(case: dict, guild) -> disnake.Embed:
     )
     embed.add_field(name="Причина", value=case["reason"][:1000], inline=False)
 
-    if action in ("mute", "ban", "warn"):
+    if has_term(case):
         embed.add_field(name="Срок", value=duration_line(case.get("expires_at")), inline=False)
 
     if case.get("id"):
@@ -1192,8 +1216,17 @@ def _case_line(row) -> str:
     if len(reason) > 70:
         reason = reason[:67] + "..."
 
+    # На сколько выдали
+    term = ""
+    if row["action"] != "warn":
+        length = term_length(row["expires_at"], row["created_at"])
+        if length:
+            term = f" · на {length}"
+        elif row["expires_at"] is None and row["action"] in ("mute", "ban"):
+            term = " · навсегда"
+
     line = (
-        f"`#{row['id']}` {action_title(row['action'])} · {ts(row['created_at'], 'R')}\n"
+        f"`#{row['id']}` {action_title(row['action'])}{term} · {ts(row['created_at'], 'R')}\n"
         f"{mark}{reason}{mark} - <@{row['actor_id']}>"
     )
 
@@ -1334,7 +1367,11 @@ def build_case_detail(row) -> disnake.Embed:
     embed.add_field(name="Причина", value=(row["reason"] or DEFAULT_REASON)[:1000], inline=False)
 
     if row["expires_at"]:
-        embed.add_field(name="Срок", value=duration_line(row["expires_at"]), inline=True)
+        embed.add_field(
+            name="Срок",
+            value=duration_line(row["expires_at"], row["created_at"]),
+            inline=True,
+        )
 
     if row["parent_id"]:
         embed.add_field(name="Связан с", value=f"кейс #{row['parent_id']}", inline=True)
