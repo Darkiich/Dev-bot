@@ -347,12 +347,22 @@ class DatabaseManagerSS14:
                 if not rank_id:
                     return False, f"Не найден ранг с названием {permission}"
 
-                await conn.execute("""
-                    INSERT INTO admin (user_id, title, admin_rank_id)
-                    VALUES ($1, $2, $3)
-                """, guid, title, rank_id)
+                # Блокировка на этого игрока до конца транзакции
+                await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1::text))", str(guid))
 
-                return True, f"Права были успешно добавлены для {username} в БД {db_name.upper()}"
+                # обновляем существующую и вставляем новую, только если её нет.
+                status = await conn.execute("""
+                    UPDATE admin SET title = $1, admin_rank_id = $2 WHERE user_id = $3
+                """, title, rank_id, guid)
+
+                if int(status.split()[-1]) == 0:
+                    await conn.execute("""
+                        INSERT INTO admin (user_id, title, admin_rank_id)
+                        VALUES ($1, $2, $3)
+                    """, guid, title, rank_id)
+                    return True, f"Права были успешно добавлены для {username} в БД {db_name.upper()}"
+
+                return True, f"У {username} уже была запись - ранг добавлен к ней в БД {db_name.upper()}"
 
         except Exception as e:
             return False, f"Ошибка: {e}"
