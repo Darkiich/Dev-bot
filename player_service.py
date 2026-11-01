@@ -204,11 +204,10 @@ async def guid_by_discord(discord_id) -> str | None:
 
 async def own_account(ctx):
     """Аккаунт автора команды: (guid, ckey, текст отказа)."""
-    guid = await guid_by_discord(ctx.author.id)
+    guid, ckey = await ss14_db.get_account_by_discord(str(ctx.author.id), PLAYER_STATS_SERVER)
     if not guid:
         return None, None, link_hint()
 
-    ckey = await ss14_db.get_player_name(guid, PLAYER_STATS_SERVER)
     if not ckey:
         return None, None, "❌ Аккаунт привязан, но игрока с таким UID в базе нет."
 
@@ -223,10 +222,9 @@ async def account_by_token(token: str):
 
     discord_id = discord_id_from(token)
     if discord_id:
-        guid = await guid_by_discord(discord_id)
+        guid, ckey = await ss14_db.get_account_by_discord(str(discord_id), PLAYER_STATS_SERVER)
         if not guid:
             return None, None, f"У <@{discord_id}> не привязан игровой аккаунт."
-        ckey = await ss14_db.get_player_name(guid, PLAYER_STATS_SERVER)
         return guid, ckey, None
 
     if looks_like_uuid(token):

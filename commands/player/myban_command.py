@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import disnake
 
 from bot_init import bot, stats_db
-from commands.player.player_common import fail, require_account
+from commands.player.player_common import fail, player_cooldown, require_account
 from dataConfig import PLAYER_STATS_SERVER
 from player_service import COLOR_BAD, COLOR_MAIN, MENTIONS, as_utc, ts
 
@@ -55,6 +55,7 @@ def _line(ban) -> str:
 
 
 @bot.command(name="myban", aliases=["мойбан", "мои_баны", "mybans"])
+@player_cooldown
 async def myban_command(ctx):
     """Свои наказания на игровом сервере."""
     guid, ckey = await require_account(ctx)

@@ -8,7 +8,7 @@ import disnake
 
 from bot_init import bot
 from commands.moderation.mod_common import reply
-from commands.player.player_common import fail, require_account
+from commands.player.player_common import fail, player_cooldown, require_account
 from player_jobs import DEPARTMENTS, job_department
 from player_service import COLOR_MAIN, MENTIONS, fmt_hours, played_roles, summary_of
 
@@ -39,6 +39,7 @@ def _trim(lines: list) -> str:
 
 
 @bot.command(name="roles", aliases=["роли"])
+@player_cooldown
 async def roles_command(ctx):
     """Время по всем ролям и список ролей, на которых ещё не играл."""
     guid, ckey = await require_account(ctx)

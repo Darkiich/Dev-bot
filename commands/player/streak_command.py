@@ -8,7 +8,7 @@ import disnake
 
 from bot_init import bot, stats_db
 from commands.moderation.mod_common import reply
-from commands.player.player_common import fail, require_account
+from commands.player.player_common import fail, player_cooldown, require_account
 from dataConfig import PLAYER_STATS_SERVER, VACATION_TIMEZONE
 from player_service import COLOR_MAIN, MENTIONS, streak_from_days
 from vacation_time import plural
@@ -21,6 +21,7 @@ def _days(number: int) -> str:
 
 
 @bot.command(name="streak", aliases=["стрик", "серия"])
+@player_cooldown
 async def streak_command(ctx):
     """Текущая и лучшая серия заходов подряд."""
     guid, ckey = await require_account(ctx)

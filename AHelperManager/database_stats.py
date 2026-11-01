@@ -8,16 +8,35 @@
 import asyncio
 import logging
 import time
+from bisect import bisect_right
 
 from datetime import timedelta
 
 from AHelperManager.database_ss14 import DatabaseManagerSS14
+from AHelperManager.shared_cache import SharedCache
 from dataConfig import PLAYER_TOP_MAX_YEARS, PLAYER_TOP_SKIP_GRANTED
 from player_jobs import OVERALL
 
 logger = logging.getLogger(__name__)
 
 TRACKERS_TTL = 3600 # список ролей меняется только с обновлением игры
+
+ROUNDS_TTL = 600
+ROUNDS_MAX_AGE = 3600
+RECENT_DAYS = 30
+TOP_KEEP = 100
+
+TOP_TTL = 300
+TOP_MAX_AGE = 1800
+
+NAME_QUERY_LIMIT = 64
+
+_ARRAY_TYPES = {"integer": "int", "bigint": "bigint", "smallint": "smallint", "uuid": "uuid"}
+
+
+def like_escape(text: str) -> str:
+    """Экранирует % и _ для ILIKE."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 class SchemaError(RuntimeError):
@@ -41,6 +60,8 @@ class DatabaseManagerStats(DatabaseManagerSS14):
         self._schema = {}
         self._trackers = {}
         self._lock = asyncio.Lock()
+        self._rounds = SharedCache(ROUNDS_TTL, ROUNDS_MAX_AGE, limit=8)
+        self._tops = SharedCache(TOP_TTL, TOP_MAX_AGE, limit=32)
 
     #  Разбор схемы
     async def _table_columns(self, conn, table: str) -> dict:
@@ -105,6 +126,7 @@ class DatabaseManagerStats(DatabaseManagerSS14):
 
                 "round_id": self._pick(rounds, "round", "round_id", "id"),
                 "round_start": self._pick(rounds, "round", "start_date", "start_time", "started_at"),
+                "round_id_type": rounds[self._pick(rounds, "round", "round_id", "id")],
 
                 "pr_player": pr_player,
                 "pr_round": pr_round,
@@ -171,35 +193,54 @@ class DatabaseManagerStats(DatabaseManagerSS14):
         conn = await self.get_connection(db_name)
         try:
             info = await self.schema(conn, db_name)
-
             player = await conn.fetchrow("""
                 SELECT player_id, user_id, first_seen_time, last_seen_time, last_seen_user_name
                 FROM player WHERE user_id = $1
             """, guid)
-            if player is None:
-                return {}
-
-            rows = await conn.fetch(f"""
-                SELECT {info['pt_tracker']} AS tracker, {info['pt_time']} AS time_spent
-                FROM play_time WHERE {info['pt_player']} = $1
-            """, self._player_key(info, player, "pt_player_uuid"))
-
-            rounds = None
-            if info["pr_player"]:
-                rounds = await conn.fetchval(f"""
-                    SELECT COUNT(*) FROM player_round WHERE {info['pr_player']} = $1
-                """, self._player_key(info, player, "pr_player_uuid"))
-
-            times = {row["tracker"]: to_timedelta(row["time_spent"]) for row in rows}
-
-            return {
-                "player": player,
-                "overall": times.get(OVERALL, timedelta()),
-                "rounds": int(rounds or 0),
-                "times": times,
-            }
         finally:
             await conn.close()
+
+        if player is None:
+            return {}
+
+        rows, rounds = await asyncio.gather(
+            self._fetch(db_name, f"""
+                SELECT {info['pt_tracker']} AS tracker, {info['pt_time']} AS time_spent
+                FROM play_time WHERE {info['pt_player']} = $1
+            """, self._player_key(info, player, "pt_player_uuid")),
+            self._rounds_of(db_name, info, self._player_key(info, player, "pr_player_uuid")),
+        )
+
+        times = {row["tracker"]: to_timedelta(row["time_spent"]) for row in rows}
+
+        return {
+            "player": player,
+            "overall": times.get(OVERALL, timedelta()),
+            "rounds": int(rounds or 0),
+            "times": times,
+        }
+
+    async def _fetch(self, db_name: str, query: str, *args) -> list:
+        conn = await self.get_connection(db_name)
+        try:
+            return await conn.fetch(query, *args)
+        finally:
+            await conn.close()
+
+    async def _rounds_of(self, db_name: str, info: dict, key) -> int:
+        """Число раундов игрока."""
+        if not info["pr_player"]:
+            return 0
+
+        counts = self._rounds_entry(db_name, RECENT_DAYS).peek()
+        if counts is not None:
+            return counts["total"].get(key, 0)
+
+        self._rounds_entry(db_name, RECENT_DAYS).warm()
+        rows = await self._fetch(db_name, f"""
+            SELECT COUNT(*) AS n FROM player_round WHERE {info['pr_player']} = $1
+        """, key)
+        return int(rows[0]["n"]) if rows else 0
 
     async def trackers(self, db_name: str = "mrp") -> list:
         """Все трекеры, которые встречаются на сервере. Кэш на час."""
@@ -293,6 +334,15 @@ class DatabaseManagerStats(DatabaseManagerSS14):
     #  Рейтинги
     async def top_by_trackers(self, trackers: list, limit: int = 10, db_name: str = "mrp") -> list:
         """Топ игроков по времени. Несколько трекеров считаются как одна роль."""
+        trackers = sorted(set(trackers))
+        key = (db_name, tuple(trackers), int(limit))
+        return await self._tops.get(
+            key,
+            lambda: self._load_top_by_trackers(trackers, int(limit), db_name),
+            f"топ по часам ({', '.join(trackers)[:60]})",
+        )
+
+    async def _load_top_by_trackers(self, trackers: list, limit: int, db_name: str) -> list:
         conn = await self.get_connection(db_name)
         try:
             info = await self.schema(conn, db_name)
@@ -333,124 +383,124 @@ class DatabaseManagerStats(DatabaseManagerSS14):
         finally:
             await conn.close()
 
-    async def top_by_rounds(self, days: int = None, limit: int = 10, db_name: str = "mrp") -> list:
-        """Топ по числу раундов. days=None - за всё время."""
+    #  Общий подсчёт раундов
+    def _rounds_entry(self, db_name: str, days: int):
+        return self._rounds.entry(
+            (db_name, int(days)),
+            lambda: self._load_round_counts(db_name, int(days)),
+            f"раунды всех игроков ({db_name}, {days} дн.)",
+        )
+
+    async def _load_round_counts(self, db_name: str, days: int) -> dict:
+        """Раунды каждого игрока: всего и за последние days дней."""
         conn = await self.get_connection(db_name)
         try:
             info = await self.schema(conn, db_name)
             if not info["pr_player"]:
                 raise SchemaError("в базе нет таблицы player_round")
 
-            if days is None:
-                rows = await conn.fetch(f"""
-                    SELECT pr.{info['pr_player']} AS k, COUNT(*) AS n
-                    FROM player_round pr
-                    GROUP BY 1 ORDER BY n DESC LIMIT $1
-                """, limit)
-            else:
-                rows = await conn.fetch(f"""
-                    SELECT pr.{info['pr_player']} AS k, COUNT(*) AS n
-                    FROM player_round pr
-                    JOIN round r ON r.{info['round_id']} = pr.{info['pr_round']}
-                    WHERE r.{info['round_start']} >= now() - $1::interval
-                    GROUP BY 1 ORDER BY n DESC LIMIT $2
-                """, timedelta(days=days), limit)
+            id_type = _ARRAY_TYPES.get(info["round_id_type"])
+            if id_type is None:
+                raise SchemaError(f"неожиданный тип round_id: {info['round_id_type']}")
 
-            names = await self._names(conn, [row["k"] for row in rows], info["pr_player_uuid"])
+            recent = await conn.fetch(f"""
+                SELECT DISTINCT {info['round_id']} AS id FROM round
+                WHERE {info['round_start']} >= now() - $1::interval
+            """, timedelta(days=days))
 
-            return [
-                {"ckey": names.get(row["k"]) or "Неизвестно", "rounds": int(row["n"])}
-                for row in rows
-            ]
+            rows = await conn.fetch(f"""
+                SELECT pr.{info['pr_player']} AS k, COUNT(*) AS total, COUNT(r.id) AS recent
+                FROM player_round pr
+                LEFT JOIN unnest($1::{id_type}[]) AS r(id) ON r.id = pr.{info['pr_round']}
+                GROUP BY 1
+            """, [row["id"] for row in recent])
+
+            total = {row["k"]: int(row["total"]) for row in rows}
+            recent_counts = {row["k"]: int(row["recent"]) for row in rows if row["recent"]}
+
+            top_total = sorted(total.items(), key=lambda item: (-item[1], str(item[0])))[:TOP_KEEP]
+            top_recent = sorted(recent_counts.items(), key=lambda item: (-item[1], str(item[0])))[:TOP_KEEP]
+            names = await self._names(
+                conn, list({k for k, _ in top_total} | {k for k, _ in top_recent}), info["pr_player_uuid"]
+            )
+        finally:
+            await conn.close()
+
+        return {
+            "total": total,
+            "recent": recent_counts,
+            "total_sorted": sorted(total.values()),
+            "recent_sorted": sorted(recent_counts.values()),
+            "top_total": [(names.get(k) or "Неизвестно", n) for k, n in top_total],
+            "top_recent": [(names.get(k) or "Неизвестно", n) for k, n in top_recent],
+        }
+
+    async def top_by_rounds(self, days: int = None, limit: int = 10, db_name: str = "mrp") -> list:
+        """Топ по числу раундов. days=None - за всё время."""
+        counts = await self._rounds_entry(db_name, days or RECENT_DAYS).get()
+        rows = counts["top_total"] if days is None else counts["top_recent"]
+        return [{"ckey": ckey, "rounds": n} for ckey, n in rows[:max(0, int(limit))]]
+
+    async def _player_ids(self, guid, db_name: str):
+        conn = await self.get_connection(db_name)
+        try:
+            info = await self.schema(conn, db_name)
+            player = await conn.fetchrow("SELECT player_id, user_id FROM player WHERE user_id = $1", guid)
+            return info, player
         finally:
             await conn.close()
 
     async def rank_by_trackers(self, guid, groups: list, db_name: str = "mrp") -> list:
         """Места игрока по каждой группе трекеров: (место, всего, время) или None."""
-        conn = await self.get_connection(db_name)
-        try:
-            info = await self.schema(conn, db_name)
+        info, player = await self._player_ids(guid, db_name)
+        if player is None:
+            return [None] * len(groups)
 
-            player = await conn.fetchrow("SELECT player_id, user_id FROM player WHERE user_id = $1", guid)
-            if player is None:
-                return [None] * len(groups)
+        key = self._player_key(info, player, "pt_player_uuid")
+        query = f"""
+            WITH totals AS (
+                SELECT {info['pt_player']} AS player, SUM({info['pt_time']}) AS time_spent
+                FROM play_time
+                WHERE {info['pt_tracker']} = ANY($1::text[])
+                GROUP BY 1
+            ), mine AS (
+                SELECT time_spent FROM totals WHERE player = $2
+            )
+            SELECT
+                (SELECT time_spent FROM mine) AS time_spent,
+                (SELECT COUNT(*) FROM totals WHERE time_spent > (SELECT time_spent FROM mine)) AS better,
+                (SELECT COUNT(*) FROM totals) AS total
+        """
 
-            key = self._player_key(info, player, "pt_player_uuid")
-            places = []
+        results = await asyncio.gather(*(self._fetch(db_name, query, list(trackers), key) for trackers in groups))
 
-            for trackers in groups:
-                row = await conn.fetchrow(f"""
-                    WITH totals AS (
-                        SELECT {info['pt_player']} AS player, SUM({info['pt_time']}) AS time_spent
-                        FROM play_time
-                        WHERE {info['pt_tracker']} = ANY($1::text[])
-                        GROUP BY 1
-                    ), mine AS (
-                        SELECT time_spent FROM totals WHERE player = $2
-                    )
-                    SELECT
-                        (SELECT time_spent FROM mine) AS time_spent,
-                        (SELECT COUNT(*) FROM totals WHERE time_spent > (SELECT time_spent FROM mine)) AS better,
-                        (SELECT COUNT(*) FROM totals) AS total
-                """, list(trackers), key)
-
-                if row is None or row["time_spent"] is None:
-                    places.append(None)
-                    continue
-
-                places.append((int(row["better"]) + 1, int(row["total"]), to_timedelta(row["time_spent"])))
-
-            return places
-        finally:
-            await conn.close()
+        places = []
+        for rows in results:
+            row = rows[0] if rows else None
+            if row is None or row["time_spent"] is None:
+                places.append(None)
+                continue
+            places.append((int(row["better"]) + 1, int(row["total"]), to_timedelta(row["time_spent"])))
+        return places
 
     async def rank_by_rounds(self, guid, days: int = None, db_name: str = "mrp"):
         """Место по раундам: (место, всего, раундов) или None. days=None - за всё время."""
-        conn = await self.get_connection(db_name)
-        try:
-            info = await self.schema(conn, db_name)
-            if not info["pr_player"]:
-                return None
+        info, player = await self._player_ids(guid, db_name)
+        if player is None or not info["pr_player"]:
+            return None
 
-            player = await conn.fetchrow("SELECT player_id, user_id FROM player WHERE user_id = $1", guid)
-            if player is None:
-                return None
+        counts = await self._rounds_entry(db_name, days or RECENT_DAYS).get()
 
-            key = self._player_key(info, player, "pr_player_uuid")
+        key = self._player_key(info, player, "pr_player_uuid")
+        table = counts["total"] if days is None else counts["recent"]
+        ordered = counts["total_sorted"] if days is None else counts["recent_sorted"]
 
-            if days is None:
-                row = await conn.fetchrow(f"""
-                    WITH counted AS (
-                        SELECT pr.{info['pr_player']} AS k, COUNT(*) AS n
-                        FROM player_round pr
-                        GROUP BY 1
-                    )
-                    SELECT
-                        (SELECT n FROM counted WHERE k = $1) AS mine,
-                        (SELECT COUNT(*) FROM counted WHERE n > COALESCE((SELECT n FROM counted WHERE k = $1), 0)) AS better,
-                        (SELECT COUNT(*) FROM counted) AS total
-                """, key)
-            else:
-                row = await conn.fetchrow(f"""
-                    WITH counted AS (
-                        SELECT pr.{info['pr_player']} AS k, COUNT(*) AS n
-                        FROM player_round pr
-                        JOIN round r ON r.{info['round_id']} = pr.{info['pr_round']}
-                        WHERE r.{info['round_start']} >= now() - $1::interval
-                        GROUP BY 1
-                    )
-                    SELECT
-                        (SELECT n FROM counted WHERE k = $2) AS mine,
-                        (SELECT COUNT(*) FROM counted WHERE n > COALESCE((SELECT n FROM counted WHERE k = $2), 0)) AS better,
-                        (SELECT COUNT(*) FROM counted) AS total
-                """, timedelta(days=days), key)
+        mine = table.get(key)
+        if not mine:
+            return None
 
-            if row is None or row["mine"] is None:
-                return None
-
-            return int(row["better"]) + 1, int(row["total"]), int(row["mine"])
-        finally:
-            await conn.close()
+        better = len(ordered) - bisect_right(ordered, mine)
+        return better + 1, len(ordered), mine
 
     async def common_rounds(self, guid_a, guid_b, db_name: str = "mrp") -> int:
         """Сколько раундов двое провели в одном раунде."""
@@ -534,7 +584,7 @@ class DatabaseManagerStats(DatabaseManagerSS14):
                 WHERE p.char_name ILIKE $1
                 ORDER BY p.char_name
                 LIMIT 25
-            """, f"%{name}%")
+            """, f"%{like_escape((name or '').strip()[:NAME_QUERY_LIMIT])}%")
 
             return list(rows)
         finally:

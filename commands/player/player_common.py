@@ -5,12 +5,16 @@
 import logging
 
 import disnake
+from disnake.ext import commands
 
 from AHelperManager.database_stats import SchemaError
 from commands.moderation.mod_common import reply
 from player_service import own_account
 
 logger = logging.getLogger(__name__)
+
+PLAYER_COOLDOWN_SECONDS = 3
+player_cooldown = commands.cooldown(1, PLAYER_COOLDOWN_SECONDS, commands.BucketType.user)
 
 
 async def require_account(ctx):

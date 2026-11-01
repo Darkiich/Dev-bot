@@ -7,6 +7,8 @@ import logging
 
 import asyncpg
 
+from AHelperManager.db_pool import pg_connection
+
 from dataConfig import (
     TEAM_DB_HOST,
     TEAM_DB_NAME,
@@ -29,6 +31,8 @@ CONNECT_TIMEOUT = 15
 COMMAND_TIMEOUT = 60
 ATTEMPTS = 2
 
+TEAM_POOL_SIZE = 5
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,17 +53,21 @@ class DatabaseManagerPlayer:
         self._schema_ready = False
 
     async def get_connection(self):
-        conn = await asyncpg.connect(
-            **self.db_params,
-            timeout=CONNECT_TIMEOUT,
-            command_timeout=COMMAND_TIMEOUT,
+        """Соединение из пула."""
+        conn = await pg_connection(
+            {**self.db_params, "timeout": CONNECT_TIMEOUT, "command_timeout": COMMAND_TIMEOUT},
+            max_size=TEAM_POOL_SIZE,
         )
 
         if not self._schema_ready:
-            async with self._lock:
-                if not self._schema_ready:
-                    await self._prepare(conn)
-                    self._schema_ready = True
+            try:
+                async with self._lock:
+                    if not self._schema_ready:
+                        await self._prepare(conn)
+                        self._schema_ready = True
+            except BaseException:
+                await conn.close()
+                raise
 
         return conn
 

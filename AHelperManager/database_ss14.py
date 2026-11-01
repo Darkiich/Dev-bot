@@ -1,5 +1,7 @@
 import asyncpg
 import json
+
+from AHelperManager.db_pool import pg_connection
 import logging
 from dataConfig import DATABASE_MRP, DATABASE_DEV, DATABASE_HOST, DATABASE_PORT, DATABASE_USER, DATABASE_PASS, DATABASE_MRP_SPONSOR
 from datetime import datetime
@@ -17,7 +19,12 @@ SS14_SESSION_SETTINGS = {
     "lock_timeout": "7s",
     # открытая транзакция закроется сама
     "idle_in_transaction_session_timeout": "15s",
+    "tcp_keepalives_idle": "60",
+    "tcp_keepalives_interval": "15",
+    "tcp_keepalives_count": "4",
 }
+
+POOL_SIZE = {"mrp": 10, "dev": 3, "mrp_sponsor": 3}
 
 
 class DatabaseManagerSS14:
@@ -50,18 +57,20 @@ class DatabaseManagerSS14:
         }
 
     async def get_connection(self, db_name='mrp'):
-        """Возвращает асинхронное соединение с указанной базой данных"""
+        """Соединение из пула."""
         if db_name not in self.db_params:
             raise ValueError(f"Неизвестное имя БД: {db_name}")
 
         params = self.db_params[db_name]
-        dsn = f"postgres://{params['user']}:{params['password']}@{params['host']}:{params['port']}/{params['database']}"
-
-        return await asyncpg.connect(
-            dsn,
-            timeout=CONNECT_TIMEOUT,
-            command_timeout=COMMAND_TIMEOUT,
-            server_settings=SS14_SESSION_SETTINGS,
+        return await pg_connection(
+            {
+                **params,
+                "port": int(params["port"] or 5432),
+                "timeout": CONNECT_TIMEOUT,
+                "command_timeout": COMMAND_TIMEOUT,
+                "server_settings": SS14_SESSION_SETTINGS,
+            },
+            max_size=POOL_SIZE.get(db_name, 3),
         )
 
     async def get_databases_size(self, db_name: str = 'mrp'):
@@ -154,6 +163,21 @@ class DatabaseManagerSS14:
         finally:
             await conn.close()
     
+    async def get_account_by_discord(self, discord_id: str, db_name: str = 'mrp'):
+        """(GUID, ник) по ID дискорда."""
+        conn = await self.get_connection(db_name)
+        try:
+            row = await conn.fetchrow("""
+                SELECT d.user_id, p.last_seen_user_name
+                FROM discord_user d
+                LEFT JOIN player p ON p.user_id = d.user_id
+                WHERE d.discord_id = $1
+                LIMIT 1
+            """, discord_id)
+            return (row["user_id"], row["last_seen_user_name"]) if row else (None, None)
+        finally:
+            await conn.close()
+
     async def get_discord_info_by_guid(self, user_id: str, db_name: str = 'mrp'):
         """
         Получает discord id по GUID пользователя.
