@@ -8,7 +8,7 @@ import disnake
 
 from bot_init import bot, stats_db
 from commands.moderation.mod_common import reply
-from commands.player.player_common import fail
+from commands.player.player_common import fail, player_cooldown
 from dataConfig import PLAYER_STATS_SERVER, PLAYER_TOP_LIMIT
 from player_jobs import OVERALL, find_tracker, job_name
 from player_service import COLOR_MAIN, MENTIONS, fmt_hours
@@ -35,6 +35,7 @@ def _lines(rows: list, value_key, formatter) -> str:
 
 
 @bot.command(name="top", aliases=["топ"])
+@player_cooldown
 async def top_command(ctx, *, query: str = ""):
     """`&top`, `&top месяц`, `&top капитан`."""
     query = (query or "").strip().lower()

@@ -2,13 +2,14 @@
 &rank - какие места занимаешь в рейтингах
 """
 
+import asyncio
 import logging
 
 import disnake
 
 from bot_init import bot, stats_db
 from commands.moderation.mod_common import reply
-from commands.player.player_common import fail, require_account
+from commands.player.player_common import fail, player_cooldown, require_account
 from dataConfig import PLAYER_STATS_SERVER
 from player_jobs import OVERALL
 from player_service import COLOR_MAIN, MENTIONS, fmt_hours, place_text, played_roles, summary_of
@@ -20,6 +21,7 @@ MONTH_DAYS = 30
 
 
 @bot.command(name="rank", aliases=["место", "ранг"])
+@player_cooldown
 async def rank_command(ctx):
     """Места по общему времени, по любимым ролям и по раундам за месяц."""
     guid, ckey = await require_account(ctx)
@@ -34,9 +36,11 @@ async def rank_command(ctx):
 
         top_roles = played_roles(data["times"])[:ROLES_SHOWN]
         groups = [[OVERALL]] + [trackers for _, _, trackers in top_roles]
-        places = await stats_db.rank_by_trackers(guid, groups, PLAYER_STATS_SERVER)
-        month = await stats_db.rank_by_rounds(guid, MONTH_DAYS, PLAYER_STATS_SERVER)
-        overall_rounds = await stats_db.rank_by_rounds(guid, None, PLAYER_STATS_SERVER)
+        places, month, overall_rounds = await asyncio.gather(
+            stats_db.rank_by_trackers(guid, groups, PLAYER_STATS_SERVER),
+            stats_db.rank_by_rounds(guid, MONTH_DAYS, PLAYER_STATS_SERVER),
+            stats_db.rank_by_rounds(guid, None, PLAYER_STATS_SERVER),
+        )
     except Exception as e:
         await fail(ctx, e, "rank")
         return

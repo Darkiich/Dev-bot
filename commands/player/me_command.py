@@ -2,6 +2,7 @@
 &me - карточка своего игрового аккаунта
 """
 
+import asyncio
 import logging
 
 from datetime import datetime, timezone
@@ -10,7 +11,7 @@ import disnake
 
 from bot_init import bot, ss14_db
 from commands.moderation.mod_common import reply
-from commands.player.player_common import fail, require_account
+from commands.player.player_common import fail, player_cooldown, require_account
 from dataConfig import PLAYER_STATS_SERVER
 from player_service import (
     COLOR_MAIN,
@@ -28,7 +29,16 @@ logger = logging.getLogger(__name__)
 HINT = "Подробнее: `&roles` · `&hours` · `&streak` · `&rank`"
 
 
+async def _sponsor_of(guid, ckey):
+    try:
+        return await ss14_db.get_sponsor(guid)
+    except Exception as e:
+        logger.warning("Не удалось прочитать спонсорку для %s: %s", ckey, e)
+        return None
+
+
 @bot.command(name="me", aliases=["я", "профиль", "стата"])
+@player_cooldown
 async def me_command(ctx):
     """Часы, роли, раунды и дата первого захода."""
     guid, ckey = await require_account(ctx)
@@ -36,7 +46,7 @@ async def me_command(ctx):
         return
 
     try:
-        data = await summary_of(guid)
+        data, sponsor = await asyncio.gather(summary_of(guid), _sponsor_of(guid, ckey))
     except Exception as e:
         await fail(ctx, e, "me")
         return
@@ -53,12 +63,6 @@ async def me_command(ctx):
     embed.add_field(name="Последний заход", value=ts(player["last_seen_time"], "R"), inline=True)
     embed.add_field(name="На станции с", value=since_text(player["first_seen_time"]), inline=False)
     embed.add_field(name="Любимые роли", value=top_roles_text(data["times"]), inline=False)
-
-    try:
-        sponsor = await ss14_db.get_sponsor(guid)
-    except Exception as e:
-        logger.warning("Не удалось прочитать спонсорку для %s: %s", ckey, e)
-        sponsor = None
 
     # Истёкшие подписки из базы не удаляются, поэтому смотрим на дату окончания
     if sponsor:

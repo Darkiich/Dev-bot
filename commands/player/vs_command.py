@@ -2,13 +2,14 @@
 &vs - сравнение двух игроков
 """
 
+import asyncio
 import logging
 
 import disnake
 
 from bot_init import bot, stats_db
 from commands.moderation.mod_common import error_text, reply
-from commands.player.player_common import fail, require_account
+from commands.player.player_common import fail, player_cooldown, require_account
 from dataConfig import PLAYER_STATS_SERVER
 from player_service import (
     COLOR_MAIN,
@@ -48,6 +49,7 @@ def _favourite(data: dict) -> str:
 
 
 @bot.command(name="vs", aliases=["сравнить", "против"])
+@player_cooldown
 async def vs_command(ctx, *, target: str):
     """Сравнивает тебя с другим игроком."""
     guid, ckey = await require_account(ctx)
@@ -64,13 +66,14 @@ async def vs_command(ctx, *, target: str):
             await reply(ctx, "Сравнивать себя с собой скучно. Укажи кого-нибудь другого.")
             return
 
-        mine = await summary_of(guid)
-        theirs = await summary_of(other_guid)
+        mine, theirs, together = await asyncio.gather(
+            summary_of(guid),
+            summary_of(other_guid),
+            stats_db.common_rounds(guid, other_guid, PLAYER_STATS_SERVER),
+        )
         if not mine or not theirs:
             await reply(ctx, "❌ Одного из игроков нет в игровой базе.")
             return
-
-        together = await stats_db.common_rounds(guid, other_guid, PLAYER_STATS_SERVER)
     except Exception as e:
         await fail(ctx, e, "vs")
         return

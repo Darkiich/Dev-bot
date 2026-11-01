@@ -2,6 +2,7 @@
 &hours - часы за неделю и месяц с динамикой по дням
 """
 
+import asyncio
 import logging
 
 from datetime import datetime, timedelta
@@ -10,7 +11,7 @@ import disnake
 
 from bot_init import bot, player_db
 from commands.moderation.mod_common import reply
-from commands.player.player_common import fail, require_account
+from commands.player.player_common import fail, player_cooldown, require_account
 from player_service import COLOR_MAIN, MENTIONS, bar, fmt_minutes, summary_of
 from vacation_time import TZ
 
@@ -57,6 +58,7 @@ def _chart(rows: list, now_minutes: int) -> str:
 
 
 @bot.command(name="hours", aliases=["часы"])
+@player_cooldown
 async def hours_command(ctx):
     """Сколько наиграно за неделю и месяц."""
     guid, ckey = await require_account(ctx)
@@ -64,18 +66,20 @@ async def hours_command(ctx):
         return
 
     try:
-        data = await summary_of(guid)
+        today = datetime.now(TZ).date()
+
+        data, week, month, series, first_day = await asyncio.gather(
+            summary_of(guid),
+            player_db.snapshot_before(guid, today - timedelta(days=7)),
+            player_db.snapshot_before(guid, today - timedelta(days=30)),
+            player_db.snapshot_series(guid, CHART_DAYS + 1),
+            player_db.first_snapshot_day(guid),
+        )
         if not data:
             await reply(ctx, "❌ Этого игрока нет в игровой базе.")
             return
 
         now_minutes = int(data["overall"].total_seconds() // 60)
-        today = datetime.now(TZ).date()
-
-        week = await player_db.snapshot_before(guid, today - timedelta(days=7))
-        month = await player_db.snapshot_before(guid, today - timedelta(days=30))
-        series = await player_db.snapshot_series(guid, CHART_DAYS + 1)
-        first_day = await player_db.first_snapshot_day(guid)
     except Exception as e:
         await fail(ctx, e, "hours")
         return

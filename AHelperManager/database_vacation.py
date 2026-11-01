@@ -10,6 +10,8 @@ from datetime import datetime
 
 import aiomysql
 
+from AHelperManager.db_pool import mysql_connection
+
 from dataConfig import (
     VACATION_DB_HOST,
     VACATION_DB_NAME,
@@ -37,6 +39,8 @@ _CONNECTION_ERRORS = (
 
 CONNECT_TIMEOUT = 15
 ATTEMPTS = 2
+
+VACATION_POOL_SIZE = 3
 
 DEFAULT_REASON_LIMIT = 255
 
@@ -85,20 +89,27 @@ class DatabaseManagerVacation:
 
     #  Соединение и подготовка схемы
     async def get_connection(self):
-        """Открывает соединение и при первом обращении сверяет схему таблицы."""
-        conn = await aiomysql.connect(**self.db_params)
+        """Соединение из пула, при первом обращении сверяет схему таблицы."""
+        conn = await mysql_connection(self.db_params, max_size=VACATION_POOL_SIZE)
 
-        try:
-            async with conn.cursor() as cur:
-                await cur.execute("SET time_zone = %s", (_session_timezone(),))
-        except Exception as e:
-            logger.warning("Не удалось задать часовой пояс сессии: %s", e)
+        zone = _session_timezone()
+        if getattr(conn.raw, "adt_time_zone", None) != zone:
+            try:
+                async with conn.cursor() as cur:
+                    await cur.execute("SET time_zone = %s", (zone,))
+                conn.raw.adt_time_zone = zone
+            except Exception as e:
+                logger.warning("Не удалось задать часовой пояс сессии: %s", e)
 
         if not self._schema_checked:
-            async with self._lock:
-                if not self._schema_checked:
-                    await self._prepare(conn)
-                    self._schema_checked = True
+            try:
+                async with self._lock:
+                    if not self._schema_checked:
+                        await self._prepare(conn)
+                        self._schema_checked = True
+            except BaseException:
+                conn.close()
+                raise
 
         return conn
 

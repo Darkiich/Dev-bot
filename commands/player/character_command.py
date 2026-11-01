@@ -9,7 +9,7 @@ import disnake
 from bot_init import bot, player_db, ss14_db, stats_db
 from commands.moderation.mod_common import reply
 from commands.player.character_card import build_card, name_of
-from commands.player.player_common import fail
+from commands.player.player_common import fail, player_cooldown
 from dataConfig import PLAYER_CHARACTERS_BY_DISCORD, PLAYER_STATS_SERVER
 from player_jobs import species_name
 from player_service import (
@@ -199,6 +199,7 @@ async def _resolve(ctx, query: str):
 
 
 @bot.command(name="character", aliases=["перс", "char", "персонаж"])
+@player_cooldown
 async def character_command(ctx, *, query: str = ""):
     """`&character`, `&character @участник`, `&character Джон Смит`."""
     try:

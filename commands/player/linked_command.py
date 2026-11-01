@@ -2,13 +2,14 @@
 &linked - привязан ли аккаунт и к какому UID
 """
 
+import asyncio
 import logging
 
 import disnake
 
 from bot_init import bot, ss14_db, stats_db
 from commands.moderation.mod_common import reply
-from commands.player.player_common import fail, send_private
+from commands.player.player_common import fail, player_cooldown, send_private
 from dataConfig import PLAYER_STATS_SERVER
 from player_service import COLOR_MAIN, ts, guid_by_discord, link_hint
 
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 @bot.command(name="linked", aliases=["привязка", "link_status"])
+@player_cooldown
 async def linked_command(ctx):
     """Показывает, к какому игровому аккаунту привязан Discord."""
     try:
@@ -24,8 +26,10 @@ async def linked_command(ctx):
             await reply(ctx, link_hint())
             return
 
-        ckey = await ss14_db.get_player_name(guid, PLAYER_STATS_SERVER)
-        row = await stats_db.player_row(guid, PLAYER_STATS_SERVER)
+        ckey, row = await asyncio.gather(
+            ss14_db.get_player_name(guid, PLAYER_STATS_SERVER),
+            stats_db.player_row(guid, PLAYER_STATS_SERVER),
+        )
     except Exception as e:
         await fail(ctx, e, "linked")
         return
