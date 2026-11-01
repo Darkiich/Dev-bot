@@ -6,7 +6,7 @@ import logging
 
 import disnake
 
-from bot_init import bot, player_db, stats_db
+from bot_init import bot, player_db, ss14_db, stats_db
 from commands.moderation.mod_common import reply
 from commands.player.character_card import build_card, name_of
 from commands.player.player_common import fail
@@ -26,6 +26,56 @@ logger = logging.getLogger(__name__)
 
 PANEL_TIMEOUT = 180
 OPTIONS_LIMIT = 25
+
+
+def _can_reveal(user, row, owner) -> bool:
+    """Показывать ли владельца."""
+    return owner is None and "owner_user_id" in set(row.keys()) and can_see_private(user)
+
+
+async def owner_text(guid) -> str:
+    """Кто играет за персонажа - сикей, UID и Discord. Отправляется только скрытым сообщением."""
+    try:
+        ckey = await ss14_db.get_player_name(guid, PLAYER_STATS_SERVER)
+        discord_id = await ss14_db.get_discord_info_by_guid(guid, PLAYER_STATS_SERVER)
+    except Exception as e:
+        logger.warning("Не удалось узнать владельца персонажа %s: %s", guid, e)
+        return f"👤 Владелец: UID `{guid}` (юз узнать не получилось)"
+
+    text = f"👤 Играет **{ckey or 'неизвестно'}** · UID `{guid}`"
+    if discord_id:
+        text += f" · <@{discord_id}>"
+    return text
+
+
+class OwnerView(disnake.ui.View):
+    """
+    Кнопка «Кто играет» под карточкой из поиска по имени.
+    Карточку видят все в канале, а владельца - только админский состав, скрытым сообщением
+    """
+
+    def __init__(self, guid):
+        super().__init__(timeout=PANEL_TIMEOUT)
+        self.guid = guid
+        self.message = None
+
+    async def interaction_check(self, inter) -> bool:
+        if not can_see_private(inter.author):
+            await inter.response.send_message("Это видит только администрация.", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self):
+        if self.message is not None:
+            try:
+                await self.message.edit(view=None)
+            except disnake.HTTPException:
+                pass
+
+    @disnake.ui.button(label="Кто играет", emoji="👤", style=disnake.ButtonStyle.secondary)
+    async def reveal(self, button, inter):
+        await inter.response.defer(ephemeral=True)
+        await inter.followup.send(await owner_text(self.guid), ephemeral=True, allowed_mentions=MENTIONS)
 
 
 class CharacterSelect(disnake.ui.StringSelect):
@@ -51,7 +101,18 @@ class CharacterSelect(disnake.ui.StringSelect):
     async def callback(self, inter: disnake.MessageInteraction):
         row = self.rows[int(self.values[0])]
         await inter.response.defer(ephemeral=True)
-        await inter.followup.send(embed=await build_card(row, self.owner), ephemeral=True)
+
+        # Карточка скрытая, поэтому админскому составу сразу пишем и владельца
+        content = None
+        if _can_reveal(inter.author, row, self.owner):
+            content = await owner_text(row["owner_user_id"])
+
+        await inter.followup.send(
+            content=content,
+            embed=await build_card(row, self.owner),
+            ephemeral=True,
+            allowed_mentions=MENTIONS,
+        )
 
 
 class CharacterPanel(disnake.ui.View):
@@ -160,7 +221,15 @@ async def character_command(ctx, *, query: str = ""):
         return
 
     if len(rows) == 1:
-        await ctx.send(embed=await build_card(rows[0], owner), allowed_mentions=MENTIONS)
+        row = rows[0]
+        card = await build_card(row, owner)
+
+        # Поиск по имени: карточка общая, владелец - по кнопке и только администрации
+        if _can_reveal(ctx.author, row, owner):
+            view = OwnerView(row["owner_user_id"])
+            view.message = await ctx.send(embed=card, view=view, allowed_mentions=MENTIONS)
+        else:
+            await ctx.send(embed=card, allowed_mentions=MENTIONS)
         return
 
     title = "🪪 Мои персонажи" if owner == "ты" else (
