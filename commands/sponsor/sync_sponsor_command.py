@@ -1,3 +1,4 @@
+import logging
 from bot_init import bot
 from disnake.ext.commands import has_any_role
 from dataConfig import ROLE_ACCESS_SPONSOR
@@ -5,6 +6,7 @@ from dataConfig import ROLE_ACCESS_SPONSOR
 from .sponsor_api import SponsorApiError
 from .sponsor_discord_roles import sync_sponsor_roles
 
+logger = logging.getLogger(__name__)
 
 @has_any_role(*ROLE_ACCESS_SPONSOR)
 @bot.command(name="sync_sponsors", aliases=["sync_roles"])
@@ -17,6 +19,7 @@ async def sync_sponsors_command(ctx):
             await ctx.send(f"Не удалось синхронизировать: игровое API недоступно.\n```{error}```")
             return
         except Exception as error:
+            logger.exception("Сбой ручной синхронизации ролей спонсоров")
             await ctx.send(f"Сбой синхронизации ролей:\n```{error!r}```")
             return
 
