@@ -1,14 +1,14 @@
 import logging
 from bot_init import bot
 from disnake.ext.commands import has_any_role
-from dataConfig import ROLE_ACCESS_TOP_HEADS
+from dataConfig import ROLE_ACCESS_SPONSOR
 
 from .sponsor_api import SponsorApiError
 from .sponsor_discord_roles import sync_sponsor_roles
 
 logger = logging.getLogger(__name__)
 
-@has_any_role(*ROLE_ACCESS_TOP_HEADS)
+@has_any_role(*ROLE_ACCESS_SPONSOR)
 @bot.command(name="sync_sponsors", aliases=["sync_roles"])
 async def sync_sponsors_command(ctx):
     """Сразу синхронизирует роли спонсоров (старая и новая спонсорка), не дожидаясь часового цикла."""
