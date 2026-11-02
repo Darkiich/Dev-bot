@@ -29,7 +29,7 @@ async def _collect_wanted():
     if old_role:
         managed.add(old_role)
 
-    old_guids = await ss14_db.get_active_sponsor_guids() if old_role else []
+    old_guids = [str(g) for g in await ss14_db.get_active_sponsor_guids()] if old_role else []
 
     all_guids = list(set(players.keys()) | set(old_guids))
     discord_by_guid = await ss14_db.get_discord_ids_by_guids(all_guids) if all_guids else {}
