@@ -34,6 +34,9 @@ async def _collect_wanted():
     all_guids = list(set(players.keys()) | set(old_guids))
     discord_by_guid = await ss14_db.get_discord_ids_by_guids(all_guids) if all_guids else {}
 
+    if all_guids and not discord_by_guid:
+        raise RuntimeError("Не удалось получить привязки Discord из базы")
+
     wanted = {}
 
     # Новая спонсорка: роли из тиров
