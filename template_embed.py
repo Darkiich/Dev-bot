@@ -202,6 +202,7 @@ embed_sponsor_help = {
         {"name": "&sponsor <username>", "value": 'Показывает информацию о спонсоре по его никнейму.', "inline": False},
         {"name": "&add_sponsor <username> <tier> <date>", "value": 'Добавляет пользователя в спонсоры. Дата в формате YYYY-MM-DD.', "inline": False},
         {"name": "&del_sponsor <username>", "value": 'Удаляет пользователя из спонсоров.', "inline": False},
+        {"name": "&sync_sponsors / &sync_roles", "value": 'Сразу синхронизирует роли спонсоров в Discord (старая и новая спонсорка), не дожидаясь часового цикла.', "inline": False},
         {"name": "&sponsor_panel / &sp", "value": 'Открывает интерактивную панель управления спонсорами (поиск, изменение тира, выдача ролей).', "inline": False},
     ]
 }
