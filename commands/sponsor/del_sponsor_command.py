@@ -1,8 +1,8 @@
 from bot_init import bot, ss14_db
 from disnake.ext.commands import has_any_role
-from dataConfig import ROLE_ACCESS_TOP_HEADS
+from dataConfig import ROLE_ACCESS_SPONSOR
 
-@has_any_role(*ROLE_ACCESS_TOP_HEADS)
+@has_any_role(*ROLE_ACCESS_SPONSOR)
 @bot.command(name="del_sponsor")
 async def del_sponsor_command(ctx, username: str):
     guid = await ss14_db.get_player_guid(username)
