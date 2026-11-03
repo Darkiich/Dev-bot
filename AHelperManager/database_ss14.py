@@ -512,6 +512,23 @@ class DatabaseManagerSS14:
         finally:
             await conn.close()
 
+    async def get_active_sponsors_with_tier(self, db_name: str = 'mrp_sponsor'):
+        """
+        Возвращает {GUID(str): tier|None} для активных спонсоров старой системы.
+        """
+        conn = await self.get_connection(db_name)
+        try:
+            rows = await conn.fetch("""
+                SELECT user_id, tier FROM sponsors
+                WHERE expire_date IS NULL OR expire_date > now()
+            """)
+            return {str(r['user_id']): r['tier'] for r in rows}
+        except Exception as e:
+            logger.exception("Ошибка БД (get_active_sponsors_with_tier): %s", e)
+            return {}
+        finally:
+            await conn.close()
+
     async def get_discord_ids_by_guids(self, guids: list, db_name: str = 'mrp'):
         """
         Возвращает dict {GUID(str): discord_id} для переданного списка GUID.

@@ -29,7 +29,15 @@ async def _collect_wanted():
     if old_role:
         managed.add(old_role)
 
-    old_guids = [str(g) for g in await ss14_db.get_active_sponsor_guids()] if old_role else []
+    legacy_tiers = {
+        str(tier): {str(role) for role in roles}
+        for tier, roles in (data.get("legacyTiers") or {}).items()
+    }
+    for roles in legacy_tiers.values():
+        managed.update(roles)
+
+    old_sponsors = await ss14_db.get_active_sponsors_with_tier() if old_role else {}
+    old_guids = list(old_sponsors)
 
     all_guids = list(set(players.keys()) | set(old_guids))
     discord_by_guid = await ss14_db.get_discord_ids_by_guids(all_guids) if all_guids else {}
@@ -46,13 +54,23 @@ async def _collect_wanted():
             continue
         wanted.setdefault(str(discord_id), set()).update(str(role) for role in roles)
 
-    # Старая спонсорка: общая роль спонсора
+    # Старая спонсорка. Новая система приоритетнее:
+    #  1) если у игрока уже есть роли в новой системе - старая запись роли не даёт;
+    #  2) если старый тир замаплен на новый (legacy_import) - выдаём роли этого тира
+    #     (например, тир3 -> кошко-девочка), а не общую роль спонсора;
+    #  3) иначе - общая роль старой спонсорки.
     if old_role:
-        for guid in old_guids:
+        for guid, tier in old_sponsors.items():
+            if guid in players:
+                continue
             discord_id = discord_by_guid.get(guid)
             if not discord_id:
                 continue
-            wanted.setdefault(str(discord_id), set()).add(old_role)
+            mapped = legacy_tiers.get(str(tier)) if tier is not None else None
+            if mapped:
+                wanted.setdefault(str(discord_id), set()).update(mapped)
+            else:
+                wanted.setdefault(str(discord_id), set()).add(old_role)
 
     return managed, wanted
 
