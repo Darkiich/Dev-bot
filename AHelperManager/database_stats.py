@@ -335,7 +335,7 @@ class DatabaseManagerStats(DatabaseManagerSS14):
 
     #  Выданное время
     async def granted_players(self, db_name: str = "mrp") -> dict:
-        """Игроки с выданным временем: {ключ: "overall" или "roles"}."""
+        """Игроки с выданным временем: {ключ: "overall" или "roles"}. Они вне всех рейтингов по часам."""
         return await self._tops.get(
             (db_name, "granted"),
             lambda: self._load_granted(db_name),
@@ -380,13 +380,6 @@ class DatabaseManagerStats(DatabaseManagerSS14):
                     len(granted), sum(1 for kind in granted.values() if kind == "overall"))
         return granted
 
-    @staticmethod
-    def _hidden(granted: dict, trackers) -> set:
-        """Кого не ставить в рейтинг: в общем времени только с выданным Overall, в ролях всех."""
-        if list(trackers) == [OVERALL]:
-            return {k for k, kind in granted.items() if kind == "overall"}
-        return set(granted)
-
     #  Рейтинги
     async def top_by_trackers(self, trackers: list, limit: int = 10, db_name: str = "mrp") -> dict:
         """Топ по времени: {"rows": рейтинг, "granted": выданное время вне рейтинга}."""
@@ -399,7 +392,7 @@ class DatabaseManagerStats(DatabaseManagerSS14):
         )
 
     async def _load_top_by_trackers(self, trackers: list, limit: int, db_name: str) -> dict:
-        hidden = self._hidden(await self.granted_players(db_name), trackers)
+        hidden = set(await self.granted_players(db_name))
 
         conn = await self.get_connection(db_name)
         try:
@@ -504,7 +497,7 @@ class DatabaseManagerStats(DatabaseManagerSS14):
         if player is None:
             return [None] * len(groups)
 
-        granted = await self.granted_players(db_name)
+        hidden = list(await self.granted_players(db_name))
         key = self._player_key(info, player, "pt_player_uuid")
         key_type = "uuid" if info["pt_player_uuid"] else "int"
         query = f"""
@@ -524,14 +517,10 @@ class DatabaseManagerStats(DatabaseManagerSS14):
                 (SELECT COUNT(*) FROM ranked) AS total
         """
 
-        hidden_by_group = [self._hidden(granted, trackers) for trackers in groups]
-        results = await asyncio.gather(*(
-            self._fetch(db_name, query, list(trackers), key, list(hidden))
-            for trackers, hidden in zip(groups, hidden_by_group)
-        ))
+        results = await asyncio.gather(*(self._fetch(db_name, query, list(trackers), key, hidden) for trackers in groups))
 
         places = []
-        for rows, hidden in zip(results, hidden_by_group):
+        for rows in results:
             row = rows[0] if rows else None
             if row is None or row["time_spent"] is None:
                 places.append(None)
