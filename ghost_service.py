@@ -5,7 +5,7 @@
 import asyncio
 import logging
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import aiohttp
 import disnake
@@ -283,9 +283,41 @@ async def fetch_status(server: str = None) -> dict:
         "round_id": data.get("round_id"),
         "players": data.get("players"),
         "preset": clean_preset(str(data.get("preset") or "")),
+        "round_start": _round_start(data.get("round_start_time")),
     }
 
     return {key: value for key, value in status.items() if value not in (None, "")}
+
+
+def _round_start(value) -> datetime | None:
+    try:
+        moment = datetime.fromisoformat(str(value)) if value else None
+    except ValueError:
+        return None
+    if moment is not None and moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment
+
+
+async def remember_round_start(row):
+    """Запоминает старт раунда отчёта, пока этот раунд идёт на сервере."""
+    if row is None or row["round_started_at"] is not None or not row["round_id"]:
+        return row
+
+    status = await fetch_status()
+    started = status.get("round_start")
+    if started is None or status.get("round_id") != row["round_id"]:
+        return row
+
+    return await ghost_db.set_round_start(row["id"], started) or row
+
+
+def round_time(moment: datetime, started: datetime) -> str:
+    """Время от начала раунда: 01:47, до старта - лобби."""
+    seconds = int((moment - started).total_seconds())
+    if seconds < 0:
+        return "лобби"
+    return f"{seconds // 3600:02d}:{seconds % 3600 // 60:02d}"
 
 
 def status_complete(status: dict) -> bool:
@@ -596,6 +628,7 @@ async def open_shift(member, kind: str, round_id, players, preset, preset_note,
         return None, "⚠️ База недоступна, отчёт не завёлся. Попробуй ещё раз через минуту."
 
     row, problem = await announce_shift(row, member)
+    row = await remember_round_start(row)
 
     logger.info(
         "Открыт %s #%s: %s (%s), раунд %s",
@@ -625,6 +658,7 @@ async def close_shift(shift_id: int, actor, ended_at: datetime = None) -> str:
     if not can_close(actor, row):
         return "❌ Завершить смену может только её хозяин или проверяющий."
 
+    await remember_round_start(row)
     closed = await ghost_db.close_shift(shift_id, ended_at or now_local())
     if closed is None:
         return "⚠️ База недоступна, смена не закрылась. Попробуй ещё раз."
@@ -689,6 +723,7 @@ async def add_action(shift_id: int, actor, body: str) -> str:
         return "⚠️ База недоступна, действие не записалось."
 
     row = await ghost_db.get_shift(shift_id) or row
+    row = await remember_round_start(row)
     await refresh_card(row)
 
     thread = await shift_thread(row)
@@ -699,7 +734,11 @@ async def add_action(shift_id: int, actor, body: str) -> str:
             color=COLOR_INFO,
             timestamp=disnake.utils.utcnow(),
         )
-        embed.set_footer(text=f"Отчёт #{shift_id} · {actor}")
+        footer = f"Отчёт #{shift_id} · {actor}"
+        if row["round_started_at"] is not None:
+            moment = round_time(action["created_at"], row["round_started_at"])
+            footer += f" · {moment}" if moment == "лобби" else f" · раунд {moment}"
+        embed.set_footer(text=footer)
         try:
             await thread.send(embed=embed, allowed_mentions=MENTIONS)
         except disnake.HTTPException:
@@ -792,14 +831,18 @@ def build_actions_embed(row, actions) -> disnake.Embed:
         embed.description = "За смену действий не отмечали."
         return embed
 
+    started = row["round_started_at"]
     lines = []
     for action in actions:
         moment = clock(as_local(action["created_at"]))
+        if started is not None:
+            moment += f" · {round_time(action['created_at'], started)}"
         lines.append(f"`{moment}` {action['body']}")
 
     text = "\n".join(lines)
     embed.description = text[:4000] if len(text) <= 4000 else text[:3980] + "\n…"
-    embed.set_footer(text=f"Действий: {len(actions)}")
+    when = "МСК · от начала раунда" if started is not None else "МСК"
+    embed.set_footer(text=f"Действий: {len(actions)} · время {when}")
 
     return embed
 

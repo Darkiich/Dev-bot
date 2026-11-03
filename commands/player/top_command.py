@@ -9,7 +9,7 @@ import disnake
 from bot_init import bot, stats_db
 from commands.moderation.mod_common import reply
 from commands.player.player_common import fail, player_cooldown
-from dataConfig import PLAYER_STATS_SERVER, PLAYER_TOP_LIMIT
+from dataConfig import PLAYER_STATS_SERVER, PLAYER_TOP_LIMIT, PLAYER_TOP_PAGE
 from player_jobs import OVERALL, find_tracker, job_name
 from player_service import COLOR_MAIN, MENTIONS, fmt_hours
 
@@ -22,16 +22,104 @@ MONTH_DAYS = 30
 
 MEDALS = ("🥇", "🥈", "🥉")
 
+PAGES_TIMEOUT = 300
+
 
 def _place(index: int) -> str:
     return MEDALS[index] if index < len(MEDALS) else f"`{index + 1}.`"
 
 
-def _lines(rows: list, value_key, formatter) -> str:
-    return "\n".join(
-        f"{_place(index)} **{row['ckey']}** - {formatter(row[value_key])}"
-        for index, row in enumerate(rows)
-    ) or "Пока пусто."
+def _line(mark: str, row: dict, value_key, formatter) -> str:
+    return f"{mark} **{disnake.utils.escape_markdown(row['ckey'])}** - {formatter(row[value_key])}"
+
+
+def _chunks(rows: list) -> list:
+    return [rows[i:i + PLAYER_TOP_PAGE] for i in range(0, len(rows), PLAYER_TOP_PAGE)]
+
+
+def _pages(title: str, rows: list, value_key, formatter, footer: str, granted: list = ()) -> list:
+    """Страницы топа по PLAYER_TOP_PAGE мест, выданное время на последних."""
+    texts = []
+    for number, chunk in enumerate(_chunks(rows)):
+        start = number * PLAYER_TOP_PAGE
+        texts.append("\n".join(
+            _line(_place(start + index), row, value_key, formatter) for index, row in enumerate(chunk)
+        ))
+
+    for chunk in _chunks(list(granted)):
+        texts.append("**Вне рейтинга: выданное время**\n" + "\n".join(
+            _line("•", row, value_key, formatter) for row in chunk
+        ))
+
+    if granted:
+        footer += " · выданное время - в конце"
+
+    pages = []
+    for text in texts or ["Пока пусто."]:
+        embed = disnake.Embed(title=title, description=text, color=COLOR_MAIN)
+        embed.set_footer(text=footer)
+        pages.append(embed)
+    return pages
+
+
+class TopPages(disnake.ui.View):
+    """Листание топа. Листает только тот, кто вызвал."""
+
+    def __init__(self, author_id: int, pages: list):
+        super().__init__(timeout=PAGES_TIMEOUT)
+        self.author_id = author_id
+        self.pages = pages
+        self.page = 0
+        self.message = None
+        self._sync()
+
+    def _sync(self):
+        self.back.disabled = self.page == 0
+        self.forward.disabled = self.page >= len(self.pages) - 1
+        self.counter.label = f"{self.page + 1}/{len(self.pages)}"
+
+    async def interaction_check(self, inter) -> bool:
+        if inter.author.id != self.author_id:
+            await inter.response.send_message("Это чужой топ. Открой свой: `&top`.", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self):
+        if self.message is not None:
+            try:
+                await self.message.edit(view=None)
+            except disnake.HTTPException:
+                pass
+
+    async def _show(self, inter, page: int):
+        self.page = max(0, min(page, len(self.pages) - 1))
+        self._sync()
+        await inter.response.edit_message(embed=self.pages[self.page], view=self)
+
+    @disnake.ui.button(emoji="◀️", style=disnake.ButtonStyle.secondary)
+    async def back(self, button, inter):
+        await self._show(inter, self.page - 1)
+
+    @disnake.ui.button(label="1/1", style=disnake.ButtonStyle.secondary, disabled=True)
+    async def counter(self, button, inter):
+        pass
+
+    @disnake.ui.button(emoji="▶️", style=disnake.ButtonStyle.secondary)
+    async def forward(self, button, inter):
+        await self._show(inter, self.page + 1)
+
+
+async def _send(ctx, pages: list):
+    if len(pages) == 1:
+        await ctx.send(embed=pages[0], allowed_mentions=MENTIONS)
+        return
+
+    view = TopPages(ctx.author.id, pages)
+    view.message = await ctx.send(embed=pages[0], view=view, allowed_mentions=MENTIONS)
+
+
+def _rounds(n) -> str:
+    return f"{n} раундов"
 
 
 @bot.command(name="top", aliases=["топ"])
@@ -42,36 +130,27 @@ async def top_command(ctx, *, query: str = ""):
 
     try:
         if query in HOURS_WORDS:
-            rows = await stats_db.top_by_trackers([OVERALL], PLAYER_TOP_LIMIT, PLAYER_STATS_SERVER)
-            embed = disnake.Embed(
-                title="🏆 Топ по времени в игре",
-                description=_lines(rows, "time", fmt_hours),
-                color=COLOR_MAIN,
-            )
-            embed.set_footer(text="Раунды: &top раунды · своё место: &rank · роль: &top капитан")
-            await ctx.send(embed=embed, allowed_mentions=MENTIONS)
+            top = await stats_db.top_by_trackers([OVERALL], PLAYER_TOP_LIMIT, PLAYER_STATS_SERVER)
+            await _send(ctx, _pages(
+                "🏆 Топ по времени в игре", top["rows"], "time", fmt_hours,
+                "Раунды: &top раунды · своё место: &rank · роль: &top капитан", top["granted"],
+            ))
             return
 
         if query in ROUNDS_WORDS:
             rows = await stats_db.top_by_rounds(None, PLAYER_TOP_LIMIT, PLAYER_STATS_SERVER)
-            embed = disnake.Embed(
-                title="🏆 Топ по раундам",
-                description=_lines(rows, "rounds", lambda n: f"{n} раундов"),
-                color=COLOR_MAIN,
-            )
-            embed.set_footer(text="Часы: &top часы · за месяц: &top месяц · своё место: &rank")
-            await ctx.send(embed=embed, allowed_mentions=MENTIONS)
+            await _send(ctx, _pages(
+                "🏆 Топ по раундам", rows, "rounds", _rounds,
+                "Часы: &top часы · за месяц: &top месяц · своё место: &rank",
+            ))
             return
 
         if query in MONTH_WORDS:
             rows = await stats_db.top_by_rounds(MONTH_DAYS, PLAYER_TOP_LIMIT, PLAYER_STATS_SERVER)
-            embed = disnake.Embed(
-                title=f"🏆 Топ по раундам за {MONTH_DAYS} дней",
-                description=_lines(rows, "rounds", lambda n: f"{n} раундов"),
-                color=COLOR_MAIN,
-            )
-            embed.set_footer(text="Своё место смотри в &rank")
-            await ctx.send(embed=embed, allowed_mentions=MENTIONS)
+            await _send(ctx, _pages(
+                f"🏆 Топ по раундам за {MONTH_DAYS} дней", rows, "rounds", _rounds,
+                "Своё место смотри в &rank",
+            ))
             return
 
         trackers = await stats_db.trackers(PLAYER_STATS_SERVER)
@@ -97,15 +176,11 @@ async def top_command(ctx, *, query: str = ""):
             return
 
         name, group = next(iter(groups.items()))
-        rows = await stats_db.top_by_trackers(group, PLAYER_TOP_LIMIT, PLAYER_STATS_SERVER)
-
-        embed = disnake.Embed(
-            title=f"🏆 Топ по роли: {name}",
-            description=_lines(rows, "time", fmt_hours),
-            color=COLOR_MAIN,
-        )
-        embed.set_footer(text="Своё место смотри в &rank")
-        await ctx.send(embed=embed, allowed_mentions=MENTIONS)
+        top = await stats_db.top_by_trackers(group, PLAYER_TOP_LIMIT, PLAYER_STATS_SERVER)
+        await _send(ctx, _pages(
+            f"🏆 Топ по роли: {name}", top["rows"], "time", fmt_hours,
+            "Своё место смотри в &rank", top["granted"],
+        ))
 
     except Exception as e:
         await fail(ctx, e, "top")

@@ -141,6 +141,7 @@ class DatabaseManagerGhost:
                     department   text,
                     position     text,
                     round_id     integer,
+                    round_started_at timestamptz,
                     players      integer,
                     preset       text,
                     preset_note  text,
@@ -182,6 +183,7 @@ class DatabaseManagerGhost:
                 "ALTER TABLE ghost_shifts ADD COLUMN IF NOT EXISTS event_text text",
                 "ALTER TABLE ghost_shifts ADD COLUMN IF NOT EXISTS event_edits integer NOT NULL DEFAULT 0",
                 "ALTER TABLE ghost_shifts ADD COLUMN IF NOT EXISTS event_edited_at timestamptz",
+                "ALTER TABLE ghost_shifts ADD COLUMN IF NOT EXISTS round_started_at timestamptz",
             ):
                 try:
                     await conn.execute(statement)
@@ -290,6 +292,18 @@ class DatabaseManagerGhost:
             """, shift_id, event_text, _now())
 
         return await self._safe("set_event", operation)
+
+    async def set_round_start(self, shift_id, started_at):
+        """Запоминает старт раунда смены, если его ещё нет."""
+        async def operation(conn):
+            return await conn.fetchrow("""
+                UPDATE ghost_shifts
+                   SET round_started_at = $2
+                 WHERE id = $1 AND round_started_at IS NULL
+             RETURNING *
+            """, shift_id, started_at)
+
+        return await self._safe("set_round_start", operation)
 
     async def close_shift(self, shift_id, ended_at=None, review_state=None):
         """

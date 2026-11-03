@@ -14,8 +14,8 @@ from datetime import timedelta
 
 from AHelperManager.database_ss14 import DatabaseManagerSS14
 from AHelperManager.shared_cache import SharedCache
-from dataConfig import PLAYER_TOP_MAX_YEARS, PLAYER_TOP_SKIP_GRANTED
-from player_jobs import OVERALL
+from dataConfig import PLAYER_TOP_GRANTED_RATIO
+from player_jobs import OVERALL, SERVICE_TRACKERS
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,8 @@ TOP_KEEP = 100
 
 TOP_TTL = 300
 TOP_MAX_AGE = 1800
+
+GRANTED_MARGIN_HOURS = 10 # запас для новичков с парой часов
 
 NAME_QUERY_LIMIT = 64
 
@@ -331,9 +333,56 @@ class DatabaseManagerStats(DatabaseManagerSS14):
         finally:
             await conn.close()
 
+    #  Выданное время
+    async def granted_players(self, db_name: str = "mrp") -> dict:
+        """Игроки с выданным временем: {ключ: "overall" или "roles"}. Они вне всех рейтингов по часам."""
+        return await self._tops.get(
+            (db_name, "granted"),
+            lambda: self._load_granted(db_name),
+            "выданное время",
+        )
+
+    async def _load_granted(self, db_name: str) -> dict:
+        conn = await self.get_connection(db_name)
+        try:
+            info = await self.schema(conn, db_name)
+            key = "user_id" if info["pt_player_uuid"] else "player_id"
+            seconds = (
+                f"EXTRACT(EPOCH FROM {info['pt_time']})"
+                if info["pt_time_type"] == "interval" else info["pt_time"]
+            )
+
+            rows = await conn.fetch(f"""
+                WITH t AS (
+                    SELECT {info['pt_player']} AS player,
+                        COALESCE(SUM({seconds}) FILTER (WHERE {info['pt_tracker']} = $1), 0)::float8 AS overall,
+                        COALESCE(SUM({seconds}) FILTER (
+                            WHERE lower({info['pt_tracker']}) <> ALL($2::text[])
+                        ), 0)::float8 AS roles
+                    FROM play_time
+                    GROUP BY 1
+                )
+                SELECT t.player,
+                    COALESCE(t.overall > EXTRACT(EPOCH FROM now() - pl.first_seen_time)::float8, FALSE) AS overall_granted
+                FROM t
+                JOIN player pl ON pl.{key} = t.player
+                WHERE t.overall > EXTRACT(EPOCH FROM now() - pl.first_seen_time)::float8
+                   OR t.roles > t.overall * $3::float8 + $4::float8
+            """, OVERALL, sorted(SERVICE_TRACKERS), float(PLAYER_TOP_GRANTED_RATIO), GRANTED_MARGIN_HOURS * 3600.0)
+        except Exception as e:
+            logger.warning("Не удалось найти выданное время, рейтинги без фильтра: %s: %s", type(e).__name__, e)
+            return {}
+        finally:
+            await conn.close()
+
+        granted = {row["player"]: "overall" if row["overall_granted"] else "roles" for row in rows}
+        logger.info("Выданное время: игроков %d, из них с выданным общим %d",
+                    len(granted), sum(1 for kind in granted.values() if kind == "overall"))
+        return granted
+
     #  Рейтинги
-    async def top_by_trackers(self, trackers: list, limit: int = 10, db_name: str = "mrp") -> list:
-        """Топ игроков по времени. Несколько трекеров считаются как одна роль."""
+    async def top_by_trackers(self, trackers: list, limit: int = 10, db_name: str = "mrp") -> dict:
+        """Топ по времени: {"rows": рейтинг, "granted": выданное время вне рейтинга}."""
         trackers = sorted(set(trackers))
         key = (db_name, tuple(trackers), int(limit))
         return await self._tops.get(
@@ -342,22 +391,13 @@ class DatabaseManagerStats(DatabaseManagerSS14):
             f"топ по часам ({', '.join(trackers)[:60]})",
         )
 
-    async def _load_top_by_trackers(self, trackers: list, limit: int, db_name: str) -> list:
+    async def _load_top_by_trackers(self, trackers: list, limit: int, db_name: str) -> dict:
+        hidden = set(await self.granted_players(db_name))
+
         conn = await self.get_connection(db_name)
         try:
             info = await self.schema(conn, db_name)
-
             key = "user_id" if info["pt_player_uuid"] else "player_id"
-
-            args = [list(trackers), limit]
-            cap = ""
-            if PLAYER_TOP_MAX_YEARS:
-                args.append(int(PLAYER_TOP_MAX_YEARS))
-                cap = f"AND totals.time_spent <= ${len(args)}::int * interval '1 year'"
-
-            granted = ""
-            if PLAYER_TOP_SKIP_GRANTED:
-                granted = "AND date_trunc('minute', totals.time_spent) <> totals.time_spent"
 
             rows = await conn.fetch(f"""
                 WITH totals AS (
@@ -366,22 +406,23 @@ class DatabaseManagerStats(DatabaseManagerSS14):
                     WHERE {info['pt_tracker']} = ANY($1::text[])
                     GROUP BY 1
                 )
-                SELECT COALESCE(pl.last_seen_user_name, 'Неизвестно') AS ckey, totals.time_spent
+                SELECT totals.player, COALESCE(pl.last_seen_user_name, 'Неизвестно') AS ckey, totals.time_spent
                 FROM totals
                 JOIN player pl ON pl.{key} = totals.player
-                WHERE TRUE
-                  {cap}
-                  {granted}
                 ORDER BY totals.time_spent DESC
                 LIMIT $2
-            """, *args)
-
-            return [
-                {"ckey": row["ckey"], "time": to_timedelta(row["time_spent"])}
-                for row in rows
-            ]
+            """, list(trackers), limit + len(hidden))
         finally:
             await conn.close()
+
+        top, granted = [], []
+        for row in rows:
+            if len(top) >= limit:
+                break
+            item = {"ckey": row["ckey"], "time": to_timedelta(row["time_spent"])}
+            (granted if row["player"] in hidden else top).append(item)
+
+        return {"rows": top, "granted": granted}
 
     #  Общий подсчёт раундов
     def _rounds_entry(self, db_name: str, days: int):
@@ -451,28 +492,32 @@ class DatabaseManagerStats(DatabaseManagerSS14):
             await conn.close()
 
     async def rank_by_trackers(self, guid, groups: list, db_name: str = "mrp") -> list:
-        """Места игрока по каждой группе трекеров: (место, всего, время) или None."""
+        """Места игрока по группам трекеров: (место, всего, время) или None. Место None - выданное время."""
         info, player = await self._player_ids(guid, db_name)
         if player is None:
             return [None] * len(groups)
 
+        hidden = list(await self.granted_players(db_name))
         key = self._player_key(info, player, "pt_player_uuid")
+        key_type = "uuid" if info["pt_player_uuid"] else "int"
         query = f"""
             WITH totals AS (
                 SELECT {info['pt_player']} AS player, SUM({info['pt_time']}) AS time_spent
                 FROM play_time
                 WHERE {info['pt_tracker']} = ANY($1::text[])
                 GROUP BY 1
+            ), ranked AS (
+                SELECT time_spent FROM totals WHERE NOT (player = ANY($3::{key_type}[]))
             ), mine AS (
                 SELECT time_spent FROM totals WHERE player = $2
             )
             SELECT
                 (SELECT time_spent FROM mine) AS time_spent,
-                (SELECT COUNT(*) FROM totals WHERE time_spent > (SELECT time_spent FROM mine)) AS better,
-                (SELECT COUNT(*) FROM totals) AS total
+                (SELECT COUNT(*) FROM ranked WHERE time_spent > (SELECT time_spent FROM mine)) AS better,
+                (SELECT COUNT(*) FROM ranked) AS total
         """
 
-        results = await asyncio.gather(*(self._fetch(db_name, query, list(trackers), key) for trackers in groups))
+        results = await asyncio.gather(*(self._fetch(db_name, query, list(trackers), key, hidden) for trackers in groups))
 
         places = []
         for rows in results:
@@ -480,7 +525,8 @@ class DatabaseManagerStats(DatabaseManagerSS14):
             if row is None or row["time_spent"] is None:
                 places.append(None)
                 continue
-            places.append((int(row["better"]) + 1, int(row["total"]), to_timedelta(row["time_spent"])))
+            place = None if key in hidden else int(row["better"]) + 1
+            places.append((place, int(row["total"]), to_timedelta(row["time_spent"])))
         return places
 
     async def rank_by_rounds(self, guid, days: int = None, db_name: str = "mrp"):
