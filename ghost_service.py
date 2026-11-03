@@ -723,7 +723,7 @@ async def add_action(shift_id: int, actor, body: str) -> str:
         return "⚠️ База недоступна, действие не записалось."
 
     row = await ghost_db.get_shift(shift_id) or row
-    await remember_round_start(row)
+    row = await remember_round_start(row)
     await refresh_card(row)
 
     thread = await shift_thread(row)
@@ -734,7 +734,11 @@ async def add_action(shift_id: int, actor, body: str) -> str:
             color=COLOR_INFO,
             timestamp=disnake.utils.utcnow(),
         )
-        embed.set_footer(text=f"Отчёт #{shift_id} · {actor}")
+        footer = f"Отчёт #{shift_id} · {actor}"
+        if row["round_started_at"] is not None:
+            moment = round_time(action["created_at"], row["round_started_at"])
+            footer += f" · {moment}" if moment == "лобби" else f" · раунд {moment}"
+        embed.set_footer(text=footer)
         try:
             await thread.send(embed=embed, allowed_mentions=MENTIONS)
         except disnake.HTTPException:
