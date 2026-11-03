@@ -23,39 +23,39 @@ MONTH_DAYS = 30
 MEDALS = ("🥇", "🥈", "🥉")
 
 PAGES_TIMEOUT = 300
-GRANTED_SHOWN = 10
 
 
 def _place(index: int) -> str:
     return MEDALS[index] if index < len(MEDALS) else f"`{index + 1}.`"
 
 
-def _lines(rows: list, value_key, formatter, start: int = 0) -> str:
-    return "\n".join(
-        f"{_place(start + index)} **{row['ckey']}** - {formatter(row[value_key])}"
-        for index, row in enumerate(rows)
-    ) or "Пока пусто."
+def _line(mark: str, row: dict, value_key, formatter) -> str:
+    return f"{mark} **{disnake.utils.escape_markdown(row['ckey'])}** - {formatter(row[value_key])}"
 
 
-def _granted_note(granted: list) -> str:
-    if not granted:
-        return ""
-    names = ", ".join(disnake.utils.escape_markdown(row["ckey"]) for row in granted[:GRANTED_SHOWN])
-    if len(granted) > GRANTED_SHOWN:
-        names += f" и ещё {len(granted) - GRANTED_SHOWN}"
-    return f"Выданное время, вне рейтинга: {names}"
+def _chunks(rows: list) -> list:
+    return [rows[i:i + PLAYER_TOP_PAGE] for i in range(0, len(rows), PLAYER_TOP_PAGE)]
 
 
 def _pages(title: str, rows: list, value_key, formatter, footer: str, granted: list = ()) -> list:
-    """Страницы топа по PLAYER_TOP_PAGE мест."""
-    chunks = [rows[i:i + PLAYER_TOP_PAGE] for i in range(0, len(rows), PLAYER_TOP_PAGE)] or [[]]
-    note = _granted_note(granted)
+    """Страницы топа по PLAYER_TOP_PAGE мест, выданное время на последних."""
+    texts = []
+    for number, chunk in enumerate(_chunks(rows)):
+        start = number * PLAYER_TOP_PAGE
+        texts.append("\n".join(
+            _line(_place(start + index), row, value_key, formatter) for index, row in enumerate(chunk)
+        ))
+
+    for chunk in _chunks(list(granted)):
+        texts.append("**Вне рейтинга: выданное время**\n" + "\n".join(
+            _line("•", row, value_key, formatter) for row in chunk
+        ))
+
+    if granted:
+        footer += " · выданное время - в конце"
 
     pages = []
-    for number, chunk in enumerate(chunks):
-        text = _lines(chunk, value_key, formatter, number * PLAYER_TOP_PAGE)
-        if note:
-            text += f"\n\n{note}"
+    for text in texts or ["Пока пусто."]:
         embed = disnake.Embed(title=title, description=text, color=COLOR_MAIN)
         embed.set_footer(text=footer)
         pages.append(embed)
