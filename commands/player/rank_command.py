@@ -20,6 +20,13 @@ ROLES_SHOWN = 3
 MONTH_DAYS = 30
 
 
+def _time_place(found) -> str:
+    place, total, time_spent = found
+    if place is None:
+        return f"вне рейтинга, выданное время · {fmt_hours(time_spent)}"
+    return f"{place_text(place, total)} · {fmt_hours(time_spent)}"
+
+
 @bot.command(name="rank", aliases=["место", "ранг"])
 @player_cooldown
 async def rank_command(ctx):
@@ -49,12 +56,7 @@ async def rank_command(ctx):
 
     overall = places[0] if places else None
     if overall:
-        place, total, time_spent = overall
-        embed.add_field(
-            name="Время в игре",
-            value=f"{place_text(place, total)} · {fmt_hours(time_spent)}",
-            inline=False,
-        )
+        embed.add_field(name="Время в игре", value=_time_place(overall), inline=False)
 
     if overall_rounds:
         place, total, rounds = overall_rounds
@@ -77,8 +79,7 @@ async def rank_command(ctx):
         found = places[index] if index < len(places) else None
         if not found:
             continue
-        place, total, time_spent = found
-        role_lines.append(f"**{name}** - {place_text(place, total)} · {fmt_hours(time_spent)}")
+        role_lines.append(f"**{name}** - {_time_place(found)}")
 
     if role_lines:
         embed.add_field(name="Любимые роли", value="\n".join(role_lines), inline=False)
