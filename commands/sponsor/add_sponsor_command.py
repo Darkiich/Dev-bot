@@ -5,7 +5,7 @@ import disnake
 from bot_init import bot, ss14_db
 from datetime import datetime
 from disnake.ext.commands import has_any_role
-from dataConfig import ROLE_ACCESS_TOP_HEADS, SPONSOR_ROLE_ID
+from dataConfig import ROLE_ACCESS_SPONSOR, SPONSOR_ROLE_ID
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ async def grant_sponsor_role(ctx, guid: str) -> str:
         return f"⚠️ Роль не выдана: ошибка Discord ({e})."
 
 
-@has_any_role(*ROLE_ACCESS_TOP_HEADS)
+@has_any_role(*ROLE_ACCESS_SPONSOR)
 @bot.command(name="add_sponsor")
 async def add_sponsor_command(ctx, username: str, tier: int, date: str, donate_name: str = "Спонсор. Выдано через ДС бота"):
     guid = await ss14_db.get_player_guid(username)
